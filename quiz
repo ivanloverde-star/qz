@@ -1,0 +1,3189 @@
+import tkinter as tk
+from tkinter import ttk
+from tkinter import messagebox
+from tkinter import simpledialog
+import threading
+import time
+import re
+import sqlite3
+from datetime import datetime
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import json
+import socket
+import logging
+import os
+import pickle
+import subprocess
+import urllib.request
+import urllib.parse
+import shutil
+import random
+
+# IMPORTAZIONI PER APPLAUSOMETRO
+import sounddevice as sd
+import numpy as np
+import math
+
+## ==================== CONFIGURAZIONE ====================
+# Lista completa parole vietate con varianti
+PAROLE_VIETATE_RAW = """
+idiota, idioti, idiote, idiozia, stupido, stupidi, stupida, stupide, stupidaggine, stupidaggini, stupidità, 
+cretino, cretini, cretina, cretine, cretinata, cretinate, cretinetti, deficiente, deficienti, deficienza, 
+scemo, scemi, scema, sceme, scemata, scemenze, scemotto, scemenza, imbecille, imbecilli, imbecillità, 
+bastardo, bastardi, bastarda, bastarde, stronzo, stronzi, stronza, stronze, stronzata, stronzate, stronzetto, 
+merda, merde, merdoso, merdosa, merdosi, merdose, merdaccia, merdata, cazzo, cazzi, cazzata, cazzate, 
+incazzato, incazzata, cazzuto, cazzone, fottuto, fottuti, fottuta, fottute, fottiti, fottersi, fottere, fotti, 
+porco, porci, porca, porche, porcata, porcate, porcheria, porcherie, puttana, puttane, puttanata, puttanate, 
+puttaniere, puttanieri, puttanella, troia, troie, troiata, troiate, troione, troietta, vaffanculo, affanculo, 
+fanculo, vaff, vaffa, coglione, coglioni, coglionata, coglionate, coglionazzo, coglioneria, rincoglionito, 
+rincoglioniti, rincoglionita, rincoglionite, figa, fighe, fica, fiche, figona, figone, minchia, minchie, 
+minchiata, minchiate, minchione, minchioni, cornuto, cornuti, cornuta, cornute, becco, becchi, sfigato, 
+sfigati, sfigata, sfigate, sfiga, sfighe, ciccione, ciccioni, grasso, grassi, grassa, grasse, brutto, brutti, 
+brutta, brutte, cesso, cessi, mostro, mostri, orrendo, orrendi, orribile, orribili, ripugnante, ripugnanti, 
+schifoso, schifosi, schifosa, schifo, schifezza, fetente, fetenti, lurido, luridi, lurida, bavoso, bavosi, 
+negro, negri, negra, negraccio, terrone, terroni, terrona, polentone, polentoni, crucco, crucchi, marocchino, 
+marocchini, zingaro, zingari, zingara, zingaraccio, mongoloide, mongoloidi, handicappato, handicappati, down, 
+autistico, autistici, ritardato, ritardati, demente, dementi, frocio, froci, frocione, finocchio, finocchi, 
+ricchione, ricchioni, gay, lesbica, lesbiche, lesbo, zoccola, zoccole, zoccolona, vacca, vacche, vaccona, 
+maiala, maiale, maiali, maialona, baldracca, baldracche, sgualdrina, sgualdrine, mignotta, mignotte, mignottona, 
+escort, prostituta, prostitute, prostituzione, battona, battone, pompinara, pompinare, pompino, pompini, 
+succhiacazzi, succhia, leccaculo, leccaculi, leccapiedi, lecchino, lecchini, segaiolo, segaiola, trombata, 
+trombate, scopata, scopate, chiavata, chiavate, inculare, inculato, inculata, inculati, ruffiano, ruffiani, 
+ipocrita, ipocriti, falso, falsi, falsa, bugiardo, bugiardi, bugiarda, bugia, bugie, ladro, ladri, ladra, 
+ladrone, truffatore, truffatori, truffa, criminale, criminali, delinquente, delinquenti, mafioso, mafiosi, 
+mafia, camorrista, camorristi, camorra, assassino, assassini, assassina, killer, killers, terrorista, terroristi, 
+nazista, nazisti, nazi, nazismo, fascista, fascisti, fascio, fascismo, ignorante, ignoranti, ignoranza, 
+analfabeta, analfabeti, tonto, tonti, tonta, ebete, ebeti, babbeo, babbei, grullo, grulli, gonzo, gonzi, 
+allocco, allocchi, citrullo, citrulli, mentecatto, mentecatti, disagiato, disagiati, pazzo, pazzi, pazza, 
+pazzia, matto, matti, matta, folle, folli, follia, psicopatico, psicopatici, psicopatica, buffone, buffoni, 
+buffona, pagliaccio, pagliacci, fallito, falliti, fallita, perdente, perdenti, loser, losers, drogato, drogati, 
+drogata, droga, droghe, tossico, tossici, tossica, tossicodipendente, tossicodipendenti, alcolizzato, 
+alcolizzati, ubriacone, ubriaconi, ubriaco, ubriachi, barbone, barboni, pezzente, pezzenti, cacca, cacche, 
+pipi, pisciare, piscio, culo, culi, culone, tette, tetta, tettona, palle, palla, rompicoglioni, rompicazzo, 
+rompipalle, rompiballe, rompiscatole, boiata, boiate, cagata, cagate, cagare, cagone, fregna, mortacci, 
+burino, burini, coatto, coatti, chiavica, chiaviche, guappo, strunz, fess, fesso, bauscia, bestia, ostia, 
+vastasu, sceccu, boja, bogia, bischero, bischeri, fuck, fucking, fucked, fucker, fuckers, fucks, fuckface, 
+fuckhead, fuckwit, motherfucker, motherfuckers, motherfucking, mofo, shit, shitty, shithead, shitheads, shits, 
+shitface, shitbag, shitter, bitch, bitches, bitchy, bitching, bitchass, bastard, bastards, asshole, assholes, 
+ass, asses, arsehole, arseholes, asshat, damn, damned, dammit, damnit, hell, bloody, goddamn, crap, crappy, 
+crapper, craps, dick, dicks, dickhead, dickheads, dickwad, cock, cocks, cocksucker, cocksuckers, cockhead, 
+pussy, pussies, cunt, cunts, cunty, twat, twats, bullshit, horseshit, chickenshit, dumbass, dumbfuck, dumbshit, 
+retard, retarded, retards, tard, idiot, idiots, idiotic, moron, morons, moronic, stupid, stupidity, stupider, 
+dumb, dumbo, dumber, fool, fools, foolish, scumbag, scumbags, scum, jackass, jerk, jerks, jerkoff, prick, 
+pricks, wanker, wankers, wank, tosser, tossers, bollocks, balls, ballsack, piss, pissed, pissing, pisser, 
+pissant, douche, douchebag, douchebags, git, gits, sod, bugger, buggers, nigger, niggers, nigga, niggas, 
+negroes, chink, chinks, gook, gooks, spic, spics, kike, kikes, wetback, wetbacks, towelhead, towelheads, 
+raghead, beaner, beaners, cracker, crackers, honky, honkeys, fag, fags, faggot, faggots, faggy, dyke, dykes, 
+queer, queers, homo, homos, tranny, trannies, whore, whores, slut, sluts, slutty, hoe, hoes, skank, skanks, 
+skanky, hooker, hookers, thot, thots, putain, putains, pute, putes, putassier, connard, connards, connasse, 
+connasses, con, cons, conne, connes, connerie, conneries, salaud, salauds, salope, salopes, saloperie, 
+saloperies, enculé, enculés, enculée, enculées, enculer, bordel, bordels, couille, couilles, chatte, chattes, 
+bite, bites, enfoiré, enfoirés, enfoirée, enfoirées, batard, batards, batarde, batardes, ordure, ordures, 
+pourriture, pourritures, salopard, salopards, négro, négros, nègre, nègres, bougnoule, bougnoules, youpin, 
+youpins, raton, ratons, pédé, pédés, pédéraste, tapette, tapettes, gouine, gouines, traînée, traînées, garce, 
+garces, catin, catins, crétin, crétins, crétine, crétines, imbécile, imbéciles, débile, débiles, abruti, 
+abrutis, abrutie, abruties, taré, tarés, tarée, tarées, nul, nuls, nulle, nulles, pourri, pourris, pourrie, 
+pourries, dégueulasse, dégueulasses, foutu, foutus, foutue, foutues, chier, chiasse, cul, maudit, maudits, 
+maudite, maudite, cochon, cochons, cochonne, cochonnerie, porc, porcs, blyat, blyad, bliad, suka, suki, 
+pizdets, pizda, pizdu, pizdec, ebat, yebat, yob, hui, huy, khuy, huylo, mudak, mudila, mudilo, debil, debils, 
+debiloid, durak, duraki, dura, zasranec, zasranets, govno, govniuk, govnyuk, zhopa, zhopu, pidor, pidory, 
+pidoras, pidaras, svoloch, svolochi, shliuha, shlyuha, shluha, kurva, kurwa, chmo, chmoshnik, ublyudok, 
+ubludok, mraz, otmorozok, pula, pule, muie, muist, cacat, cacatul, futut, fututi, fututa, pizde, curva, curve, 
+curva, dracu, dracul, dracula, nenorocit, nenorocita, nenorociti, imbecil, imbecili, imbecila, prost, prosti, 
+proasta, proaste, handicapat, handicapati, tâmpit, târâm, dobitoc, dobitoci, dobitoaca, nesimtit, nesimtiti, 
+nesimtita, putoare, puturi, jeg, jegos, retardat, retardati, gunoi, gunoaie, puta, putas, mierda, mierdas, 
+puto, putos, joder, jodido, coño, coños, pendejo, pendejos, cabrón, cabrones, gilipollas, gilipolla, imbécil, 
+imbéciles, estúpido, estúpidos, maricón, maricones, perra, perras, zorra, zorras, caralho, caralhos, fodido, 
+fodidos, imbecis, viado, viados, bicha, bichas, pezzo di merda, testa di cazzo, figlio di puttana, figlia di puttana, 
+figlio di troia, figlia di troia, fijo de na mignotta, mammt, soret, bagg, porco dio, porco madonna, dio cane, 
+madonna cane, son of a bitch, sonovabitch, piece of shit, fuck you, fuck off, piss off, kiss my ass, suck my dick, 
+eat shit, go to hell, screw you, blow me, va te faire foutre, va te faire enculer, casse-toi, ta gueule, 
+ferme ta gueule, va chier, filho da puta, vai a cagare, vai a farti fottere, vai a morire ammazzato, suka blyat,
+galera, carcere, prigione, penitenziario, reclusorio, casa circondariale, stabilimento carcerario, detenzione, 
+reclusione, incarcerazione, prigionia, gattabuia, gabbia, bagno penale, riformatorio, cella, gabbio, tana, 
+nferrata, sbòrnia, cascina, serraglio, trappola, o carcere, carceri, cammarra, ciavatta, piova, cambusa, 
+presone, carciri, galèra, prisiòun, cárcel, prisión, trena, talego, chirona, prison, cachot, taule, cabane, 
+zonzon, cadeia, xilindró, cana, jail, penitentiary, slammer, clink, hoosegow, pokey, Gefängnis, Knast, 
+Zuchthaus, ??????, ????, ???????, f??a??, ???, carcel, gevangenis, kartzela, închisoare, wiezienie, 
+omicida, uccisora, carnefice, sicaria, briganta, malvivente, stragista, pluriomicida, parricida, matricida, 
+uxoricida, infanticida, regicida, ammazzatrice, mazzatora, trista, malandrina, sbirra, mannara, scannatora, 
+mazzeratrice, feratora, asesina, homicida, matadora, sicaria, assassine, meurtrière, tueuse, criminelle, 
+criminosa, sicária, murderess, slayer, homicide, Mörderin, Killerin, Attentäterin, Verbrecherin, ??????, 
+??????, ???????????, d???f????, f??e?t??a, ?????, ?????, asasina, hiltzailea, moordenares, criminala, 
+zabójczyni, morderczyni, internet, rete, rete informatica, rete telematica, rete globale, rete mondiale, 
+rete delle reti, cyberspazio, web, world wide web, www, rete virtuale, rete digitale, rete elettronica, 
+rete informativa, net, network, online, connessione, linea, la rete, la maglia, la ragnatela, red, 
+red informática, ciberespacio, la red mundial, toile, réseau, cyberespace, réseau mondial, rede, 
+rede mundial, ciberespaço, Netz, Netzwerk, Weltnetz, Cyberspace, Online-Netz, ????????, ????, 
+????????? ???????, ?????????????????, ?????? ????, d?ad??t??, ??te??et, pa???sµ?? ?st?, ??ße????????, 
+??????, ????, ?????? ????????, ?????? ??????????, xarxa, sarea, netwerk, re?ea, siec, swiatowa siec, 
+google, bing, yahoo, duckduckgo, baidu, yandex, ecosia, qwant, startpage, searx, brave search, swisscows, 
+dogpile, ask, wolfram alpha, neeva, you.com, mojeek, gigablast, metager, motore di ricerca, search engine, 
+motore web, motore informativo, portale di ricerca, browser search, web crawler, indice web, directory online, 
+GF, Giulia F, G.F., G.Fiori, Fiori, Giulia Fiori, G F, G-F, G_F, Giulia F., G Fiori, G. Fiori, F. Giulia, 
+FG, F G, F-G, F_G, fiorigiulia, fiori.giulia, fiori_giulia, Fiore, Fior, Fiorì, Fiorino, Fiorelli, Fiorella, Fiorello, Fioritura, Bloom, Flower, Flowers, 
+Floral, Blossom, Bud, Petal, Flwr, Flos, Fleur, Fleurs, Fleurette, Floraison, Florecita, Florita, Florzinha, 
+Blume, Blumen, Blümchen, Blüte, Bloem, Bloemen, Bloempje, ??????, ?????, ????????, ?????, ?, ?, ????, 
+??, ??, ??, ??, ????, ????, ????, ???, ??????d?, ?????, F???, Flora, Floræ, Giulia, Giuly, Giuli, 
+Giu, Giù, Giulina, Giulietta, Julia, Julie, Jules, Juli, Juliette, Julieta, Júlia, Juliana, Julinha, Julchen, 
+????, ???, ??????, ?????a, ????, ???, ???, ?????, Iulia, Gia, Lia
+"""
+
+PAROLE_VIETATE = set(p.strip().lower() for p in PAROLE_VIETATE_RAW.replace('\n', ',').split(',') if p.strip())
+CURRENT_PIN = "0000"
+CURRENT_QUIZ = None
+QUIZ_ACTIVE = False
+QUIZ_START_TIME = 0
+QUIZ_DURATION = 0
+
+def verifica_online_purgomalum(testo):
+    try:
+        encoded_text = urllib.parse.quote(testo)
+        url = f"https://www.purgomalum.com/service/containsprofanity?text={encoded_text}"
+        req = urllib.request.Request(url, headers={'User-Agent': 'Mozilla/5.0'})
+        with urllib.request.urlopen(req, timeout=2) as response:
+            result = response.read().decode('utf-8').strip().lower()
+            return result == 'true', "API: profanità rilevata" if result == 'true' else ""
+    except:
+        return False, ""
+
+def genera_pattern_oscurato(parola):
+    if len(parola) < 3:
+        return re.escape(parola)
+    oscurante = r'[*_.\-#@$%&]'
+    pattern_parts = []
+    for i, char in enumerate(parola):
+        if i == 0:
+            pattern_parts.append(f"{re.escape(char)}{oscurante}?")
+        elif i == len(parola) - 1:
+            pattern_parts.append(f"({oscurante}+|{re.escape(char)})")
+        else:
+            pattern_parts.append(f"({oscurante}+|{re.escape(char)}{oscurante}?)")
+    return ''.join(pattern_parts)
+
+def genera_varianti_morfologiche(parola):
+    varianti = [parola]
+    suffissi = ['one', 'ona', 'oni', 'etta', 'etto', 'etti', 'ette']
+    if parola.endswith('o'):
+        varianti.append(parola[:-1] + 'i')
+    elif parola.endswith('a'):
+        varianti.append(parola[:-1] + 'e')
+    elif parola.endswith('e'):
+        varianti.append(parola[:-1] + 'i')
+    if len(parola) > 4:
+        radice = parola[:-1] if parola[-1] in 'oaie' else parola
+        for suff in suffissi:
+            varianti.append(radice + suff)
+    return varianti
+
+def genera_pattern_completo():
+    tutti_pattern = []
+    for parola in PAROLE_VIETATE:
+        pattern_oscurato = genera_pattern_oscurato(parola)
+        tutti_pattern.append(pattern_oscurato)
+        varianti = genera_varianti_morfologiche(parola)
+        for var in varianti:
+            if var != parola:
+                tutti_pattern.append(genera_pattern_oscurato(var))
+    tutti_pattern.sort(key=len, reverse=True)
+    pattern_regex = r'\b(' + '|'.join(tutti_pattern) + r')\b'
+    return re.compile(pattern_regex, re.IGNORECASE)
+
+print("Generazione pattern insulti...")
+REGEX_INSULTI_AVANZATO = genera_pattern_completo()
+print(f"Pattern generato con {len(PAROLE_VIETATE)} parole base")
+
+REGEX_SOSPETTO = re.compile(r'\b\w*[*_.\-#@$%&]{2,}\w*\b', re.IGNORECASE)
+logging.basicConfig(filename='messaggi_log.txt', level=logging.INFO, encoding='utf-8')
+
+DISPLAY_FONT_SIZE = 28
+QR_CODE_SIZE = 400
+QUIZ_FONT_SIZE = 32
+SETTINGS_FILE = 'app_settings.pkl'
+NGROK_URL = None
+
+REGEX_NUMERO = re.compile(r'\b\d{10,}\b')
+REGEX_EMAIL = re.compile(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b')
+REGEX_LINK = re.compile(r'http[s]?://\S+')
+
+def load_settings():
+    try:
+        if os.path.exists(SETTINGS_FILE):
+            with open(SETTINGS_FILE, 'rb') as f:
+                return pickle.load(f) or {}
+    except:
+        pass
+    return {}
+
+def save_settings(settings):
+    try:
+        with open(SETTINGS_FILE, 'wb') as f:
+            pickle.dump(settings, f)
+    except:
+        pass
+
+def _query_ngrok_api(timeout=1):
+    try:
+        r = urllib.request.urlopen('http://127.0.0.1:4040/api/tunnels', timeout=timeout)
+        return json.loads(r.read().decode())
+    except:
+        return None
+
+def start_ngrok():
+    global NGROK_URL
+    ngrok_cmd = os.environ.get('NGROK_CMD') or ('ngrok.exe' if os.name == 'nt' else 'ngrok')
+    if not os.path.exists(ngrok_cmd):
+        resolved = shutil.which(ngrok_cmd)
+        if resolved:
+            ngrok_cmd = resolved
+    if not os.path.exists(ngrok_cmd):
+        return None
+    data = _query_ngrok_api(timeout=1)
+    if data and data.get('tunnels'):
+        NGROK_URL = data['tunnels'][0].get('public_url')
+        if NGROK_URL:
+            return NGROK_URL
+    logpath = 'ngrok_start.log'
+    cmd = [ngrok_cmd, 'http', '5000', '--log=stdout']
+    try:
+        lf = open(logpath, 'ab')
+        creationflags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' and hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+        subprocess.Popen(cmd, stdout=lf, stderr=lf, creationflags=creationflags)
+    except:
+        try:
+            lf.close()
+        except:
+            pass
+        return None
+    start_time = time.time()
+    while time.time() - start_time < 15:
+        time.sleep(0.7)
+        data = _query_ngrok_api(timeout=1)
+        if data and data.get('tunnels'):
+            NGROK_URL = data['tunnels'][0].get('public_url')
+            if NGROK_URL:
+                try:
+                    lf.close()
+                except:
+                    pass
+                return NGROK_URL
+    try:
+        lf.close()
+    except:
+        pass
+    return None
+
+def get_local_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except:
+        return "127.0.0.1"
+
+class Database:
+    def __init__(self):
+        self.conn = sqlite3.connect('messaggi.db', check_same_thread=False)
+        self.conn.execute('PRAGMA journal_mode=WAL')
+        self.conn.execute('PRAGMA synchronous=NORMAL')
+        self.init_db()
+    
+    def init_db(self):
+        c = self.conn.cursor()
+        c.execute('''CREATE TABLE IF NOT EXISTS messaggi
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                      nome TEXT, 
+                      messaggio TEXT,
+                      messaggio_filtrato TEXT, 
+                      timestamp TEXT, 
+                      stato TEXT, 
+                      ip TEXT,
+                      motivo_blocco TEXT DEFAULT '')''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_stato ON messaggi(stato)')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_timestamp ON messaggi(timestamp DESC)')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS karaoke
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT, 
+                      nome TEXT,
+                      timestamp TEXT, 
+                      ip TEXT)''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_karaoke_timestamp ON karaoke(timestamp ASC)')
+        
+        c.execute('''CREATE TABLE IF NOT EXISTS quiz_risposte
+                     (id INTEGER PRIMARY KEY AUTOINCREMENT,
+                      quiz_id INTEGER,
+                      nome TEXT,
+                      risposta TEXT,
+                      corretta INTEGER,
+                      tempo_risposta REAL,
+                      punteggio INTEGER,
+                      timestamp TEXT,
+                      ip TEXT)''')
+        c.execute('CREATE INDEX IF NOT EXISTS idx_quiz_id ON quiz_risposte(quiz_id)')
+        
+        self.conn.commit()
+        print(f"Database inizializzato")
+    
+    def add_message(self, nome, msg, msg_filt, ip, auto=False, motivo=''):
+        c = self.conn.cursor()
+        stato = 'approved' if auto else 'pending'
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        c.execute('''INSERT INTO messaggi (nome, messaggio, messaggio_filtrato, timestamp, stato, ip, motivo_blocco) 
+                     VALUES (?, ?, ?, ?, ?, ?, ?)''', (nome, msg, msg_filt, timestamp, stato, ip, motivo))
+        self.conn.commit()
+        return c.lastrowid
+    
+    def get_pending(self):
+        c = self.conn.cursor()
+        c.execute('''SELECT id, nome, messaggio, messaggio_filtrato, timestamp, motivo_blocco 
+                     FROM messaggi WHERE stato = "pending" ORDER BY id DESC''')
+        return c.fetchall()
+    
+    def get_last_approved(self):
+        c = self.conn.cursor()
+        c.execute('SELECT id, nome, messaggio_filtrato, timestamp FROM messaggi WHERE stato = "approved" ORDER BY id DESC LIMIT 1')
+        r = c.fetchone()
+        return [r] if r else []
+    
+    def approve_message(self, mid):
+        c = self.conn.cursor()
+        c.execute('UPDATE messaggi SET stato = "approved" WHERE id = ?', (mid,))
+        self.conn.commit()
+    
+    def reject_message(self, mid):
+        c = self.conn.cursor()
+        c.execute('UPDATE messaggi SET stato = "rejected" WHERE id = ?', (mid,))
+        self.conn.commit()
+    
+    def add_karaoke(self, nome, ip):
+        c = self.conn.cursor()
+        c.execute('SELECT id FROM karaoke WHERE LOWER(nome) = LOWER(?)', (nome,))
+        if c.fetchone():
+            return False
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        c.execute('INSERT INTO karaoke (nome, timestamp, ip) VALUES (?, ?, ?)', (nome, timestamp, ip))
+        self.conn.commit()
+        return True
+    
+    def get_karaoke_list(self):
+        c = self.conn.cursor()
+        c.execute('SELECT id, nome, timestamp FROM karaoke ORDER BY timestamp ASC')
+        return c.fetchall()
+    
+    def remove_karaoke(self, kid):
+        c = self.conn.cursor()
+        c.execute('DELETE FROM karaoke WHERE id = ?', (kid,))
+        self.conn.commit()
+    
+    def add_quiz_risposta(self, quiz_id, nome, risposta, corretta, tempo_risposta, punteggio, ip):
+        c = self.conn.cursor()
+        timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        c.execute('''INSERT INTO quiz_risposte (quiz_id, nome, risposta, corretta, tempo_risposta, punteggio, timestamp, ip)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', (quiz_id, nome, risposta, corretta, tempo_risposta, punteggio, timestamp, ip))
+        self.conn.commit()
+        return c.lastrowid
+    
+    def get_quiz_risposte(self, quiz_id):
+        c = self.conn.cursor()
+        c.execute('''SELECT id, nome, risposta, corretta, tempo_risposta, punteggio, timestamp 
+                     FROM quiz_risposte WHERE quiz_id = ? ORDER BY punteggio DESC, tempo_risposta ASC''', (quiz_id,))
+        return c.fetchall()
+    
+    def clear_quiz_risposte(self, quiz_id):
+        c = self.conn.cursor()
+        c.execute('DELETE FROM quiz_risposte WHERE quiz_id = ?', (quiz_id,))
+        self.conn.commit()
+
+db = Database()
+
+def contiene_insulti(testo):
+    match = REGEX_INSULTI_AVANZATO.search(testo)
+    if match:
+        return True, f"Regex: '{match.group()}'"
+    match_sospetto = REGEX_SOSPETTO.search(testo)
+    if match_sospetto:
+        return True, f"Sospetto: '{match_sospetto.group()}'"
+    try:
+        online_check, motivo_online = verifica_online_purgomalum(testo)
+        if online_check:
+            return True, motivo_online
+    except:
+        pass
+    return False, ""
+
+def filtra_messaggio(testo):
+    t = REGEX_NUMERO.sub('[NUMERO]', testo)
+    t = REGEX_EMAIL.sub('[EMAIL]', t)
+    t = REGEX_LINK.sub('[LINK]', t)
+    return t
+class MessageHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/quiz/check':
+            global QUIZ_ACTIVE, CURRENT_QUIZ, QUIZ_START_TIME, QUIZ_DURATION
+            tempo_rimanente = 0
+            if QUIZ_ACTIVE and CURRENT_QUIZ:
+                tempo_rimanente = max(0, QUIZ_DURATION - (time.time() - QUIZ_START_TIME))
+            self.send_json({
+                'active': QUIZ_ACTIVE, 
+                'quiz': CURRENT_QUIZ if QUIZ_ACTIVE else None,
+                'tempo_rimanente': tempo_rimanente
+            })
+        elif self.path.split('?')[0] in ['/', '']:
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.send_header('X-Frame-Options', 'DENY')
+            self.send_header('Cache-Control', 'no-cache, no-store, must-revalidate')
+            self.send_header('Pragma', 'no-cache')
+            self.send_header('Expires', '0')
+            self.end_headers()
+            html = self.get_html_page()
+            self.wfile.write(html.encode('utf-8'))
+        else:
+            self.send_response(404)
+            self.end_headers()
+    
+    def get_html_page(self):
+        return '''<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Messaggi, Karaoke e Quiz</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Segoe UI',Arial,sans-serif;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;flex-direction:column;position:relative;overflow-x:hidden}
+body::before{content:'';position:absolute;top:-50%;right:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(255,255,255,0.1) 1px,transparent 1px);background-size:50px 50px;animation:float 20s linear infinite;pointer-events:none}
+@keyframes float{0%{transform:translate(0,0)}100%{transform:translate(50px,50px)}}
+.container{background:white;border-radius:25px;padding:35px;max-width:550px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,0.3),0 0 0 1px rgba(255,255,255,0.1);margin-bottom:25px;position:relative;transform-style:preserve-3d;transition:transform 0.3s ease}
+.container:hover{transform:translateY(-5px)}
+h1{text-align:center;color:#333;margin-bottom:10px;font-size:28px;font-weight:700;background:linear-gradient(135deg,#667eea,#764ba2);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.subtitle{text-align:center;color:#666;font-size:14px;margin-bottom:25px;font-weight:500}
+input,textarea{width:100%;padding:15px 18px;margin:10px 0;border:2px solid #e0e0e0;border-radius:12px;font-size:16px;font-family:'Segoe UI',Arial,sans-serif;transition:all 0.3s ease;background:#f9f9f9}
+input:focus,textarea:focus{border-color:#667eea;outline:none;background:white;box-shadow:0 0 0 3px rgba(102,126,234,0.1);transform:translateY(-2px)}
+textarea{min-height:130px;resize:vertical}
+button{width:100%;padding:18px;background:linear-gradient(135deg,#667eea,#764ba2);color:white;border:none;border-radius:12px;font-size:18px;font-weight:bold;cursor:pointer;margin-top:15px;transition:all 0.3s ease;box-shadow:0 4px 15px rgba(102,126,234,0.4);position:relative;overflow:hidden}
+button::before{content:'';position:absolute;top:50%;left:50%;width:0;height:0;border-radius:50%;background:rgba(255,255,255,0.3);transform:translate(-50%,-50%);transition:width 0.6s,height 0.6s}
+button:hover::before{width:300px;height:300px}
+button:hover{transform:translateY(-3px);box-shadow:0 6px 20px rgba(102,126,234,0.5)}
+button:active{transform:translateY(-1px)}
+button:disabled{background:#ccc;cursor:not-allowed;transform:none;box-shadow:none}
+.message{margin-top:20px;padding:16px;border-radius:12px;text-align:center;font-size:15px;font-weight:600;animation:slideIn 0.4s ease}
+@keyframes slideIn{from{opacity:0;transform:translateY(-15px)}to{opacity:1;transform:translateY(0)}}
+.success{background:linear-gradient(135deg,#d4edda,#c3e6cb);color:#155724;border:2px solid #28a745}
+.error{background:linear-gradient(135deg,#f8d7da,#f5c6cb);color:#721c24;border:2px solid #dc3545}
+.hidden{display:none}
+.char-count{text-align:right;font-size:13px;color:#999;margin-top:-5px;margin-bottom:10px;font-weight:500}
+.footer-banner{text-align:center;padding:25px;background:linear-gradient(135deg,#2c3e50,#34495e);color:#00d9ff;margin-top:15px;border-radius:20px;max-width:550px;width:100%;box-shadow:0 10px 30px rgba(0,0,0,0.3)}
+.footer-banner p{font-size:15px;margin:0;font-weight:500}
+.footer-banner strong{color:#fff;font-weight:700}
+.btn-karaoke{background:linear-gradient(135deg,#f093fb,#f5576c);box-shadow:0 4px 15px rgba(245,87,108,0.4)}
+.btn-karaoke:hover{box-shadow:0 6px 20px rgba(245,87,108,0.5)}
+.btn-quiz{background:linear-gradient(135deg,#fa8c16,#faad14);box-shadow:0 4px 15px rgba(250,140,22,0.4)}
+.btn-quiz:hover{box-shadow:0 6px 20px rgba(250,140,22,0.5)}
+.pin-input{width:100%;padding:18px;margin:10px 0;border:3px solid #667eea;border-radius:12px;font-size:24px;font-family:'Courier New',monospace;text-align:center;letter-spacing:12px;font-weight:bold;background:#f0f4ff;color:#333}
+.pin-input:focus{border-color:#764ba2;box-shadow:0 0 0 4px rgba(102,126,234,0.2)}
+.pin-hint{text-align:center;color:#667eea;font-size:13px;margin-top:-5px;margin-bottom:15px;font-weight:600;font-style:italic}
+.icon{display:inline-block;margin-right:8px}
+.emoji-decoration{font-size:50px;text-align:center;margin-bottom:15px;animation:bounce 2s infinite}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.quiz-question{background:#f0f4ff;padding:20px;border-radius:12px;margin-bottom:20px;border:2px solid #667eea}
+.quiz-question p{font-size:20px;font-weight:700;color:#333;line-height:1.5}
+</style></head><body>
+
+<div class="container">
+    <div class="emoji-decoration">💬</div>
+    <h1><span class="icon">📨</span>Invia il tuo messaggio sullo schermo</h1>
+    <div class="subtitle">Il tuo messaggio apparirà sul display</div>
+    <form id="formInvia">
+        <input type="text" id="nome" placeholder="🙂 Il tuo nome" maxlength="50" required>
+        <textarea id="messaggio" placeholder="✍️ Scrivi il tuo messaggio..." maxlength="500" required></textarea>
+        <div class="char-count"><span id="charCount">0</span>/500 caratteri</div>
+        <button type="submit" id="btnInvia">📤 Invia Messaggio</button>
+    </form>
+    <div class="message hidden" id="responseInvia"></div>
+</div>
+
+<div class="container">
+    <div class="emoji-decoration">🎤</div>
+    <h1><span class="icon">🎤</span>Prenotazione Karaoke</h1>
+    <div class="subtitle">Prenota il tuo turno per cantare</div>
+    <form id="formKaraoke">
+        <input type="text" id="nomeKaraoke" placeholder="🙂 Il tuo nome per il karaoke" maxlength="50" required>
+        <input type="text" id="pinKaraoke" class="pin-input" placeholder="PIN" maxlength="4" pattern="[0-9]{4}" inputmode="numeric" required>
+        <div class="pin-hint">🔐 Il PIN è visibile sul monitor del karaoke</div>
+        <button type="submit" id="btnKaraoke" class="btn-karaoke">🎵 Prenota Karaoke</button>
+    </form>
+    <div class="message hidden" id="responseKaraoke"></div>
+</div>
+
+<div class="container" id="quizContainer">
+    <div class="emoji-decoration">🎯</div>
+    <h1><span class="icon">🎯</span>Quiz Interattivo</h1>
+    <div class="subtitle">Rispondi alla domanda e vinci!</div>
+    <div id="quizContent">
+        <p style="text-align:center;color:#999;padding:30px">⏳ Attendere inizio del quiz...</p>
+    </div>
+</div>
+
+<div class="footer-banner">
+    <p>⚡ powered by <strong>www.ivanlivemusic.com</strong> ⚡</p>
+</div>
+
+<script>
+var msgField=document.getElementById("messaggio");
+var charCount=document.getElementById("charCount");
+var currentQuizId=null;
+var selectedOption=null;
+var quizEnded=false;
+
+msgField.addEventListener("input",function(){
+    charCount.textContent=this.value.length;
+});
+
+document.getElementById("formInvia").addEventListener("submit",async function(e){
+    e.preventDefault();
+    var btn=document.getElementById("btnInvia");
+    var resp=document.getElementById("responseInvia");
+    var nome=document.getElementById("nome").value.trim();
+    var messaggio=document.getElementById("messaggio").value.trim();
+    btn.disabled=true;
+    btn.textContent="⏳ Verifica in corso...";
+    resp.classList.add("hidden");
+    try{
+        var response=await fetch("/invia",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nome:nome,messaggio:messaggio})});
+        var data=await response.json();
+        resp.classList.remove("hidden");
+        if(data.success){
+            resp.className="message success";
+            resp.textContent="✅ "+data.message;
+            document.getElementById("formInvia").reset();
+            charCount.textContent="0";
+        }else{
+            resp.className="message error";
+            resp.textContent="❌ "+(data.error||"Errore");
+        }
+    }catch(err){
+        resp.classList.remove("hidden");
+        resp.className="message error";
+        resp.textContent="❌ Errore di connessione";
+    }finally{
+        btn.disabled=false;
+        btn.textContent="📤 Invia Messaggio";
+    }
+});
+
+document.getElementById("formKaraoke").addEventListener("submit",async function(e){
+    e.preventDefault();
+    var btn=document.getElementById("btnKaraoke");
+    var resp=document.getElementById("responseKaraoke");
+    var nome=document.getElementById("nomeKaraoke").value.trim();
+    var pin=document.getElementById("pinKaraoke").value.trim();
+    btn.disabled=true;
+    btn.textContent="⏳ Invio in corso...";
+    resp.classList.add("hidden");
+    try{
+        var response=await fetch("/karaoke",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({nome:nome,pin:pin})});
+        var data=await response.json();
+        resp.classList.remove("hidden");
+        if(data.success){
+            resp.className="message success";
+            resp.textContent="✅ Prenotazione confermata! Il tuo nome è stato aggiunto alla lista.";
+            document.getElementById("formKaraoke").reset();
+        }else{
+            resp.className="message error";
+            resp.textContent="❌ "+(data.error||"Errore");
+        }
+    }catch(err){
+        resp.classList.remove("hidden");
+        resp.className="message error";
+        resp.textContent="❌ Errore di connessione";
+    }finally{
+        btn.disabled=false;
+        btn.textContent="🎵 Prenota Karaoke";
+    }
+});
+
+function updateQuiz(){
+    fetch("/quiz/check")
+        .then(function(response){return response.json();})
+        .then(function(data){
+            var content=document.getElementById("quizContent");
+            
+            if(data.active && data.quiz){
+                quizEnded=false;
+                var quiz=data.quiz;
+                var tempoRim=Math.floor(data.tempo_rimanente||0);
+                
+                if(currentQuizId !== quiz.id){
+                    currentQuizId=quiz.id;
+                    selectedOption=null;
+                    
+                    var html='<div class="quiz-question"><p>'+quiz.domanda+'</p></div>';
+                    html+='<input type="text" id="nomeQuiz" placeholder="🙂 Il tuo nome" maxlength="50" required style="margin-bottom:15px;width:100%;padding:15px 18px;border:2px solid #e0e0e0;border-radius:12px;font-size:16px;background:#f9f9f9">';
+                    html+='<div class="quiz-options" id="quizOptions">';
+                    for(var i=0;i<quiz.opzioni.length;i++){
+                        html+='<div class="quiz-option" data-option="'+(i+1)+'" style="width:100%;padding:16px;background:#f9f9f9;border:2px solid #e0e0e0;border-radius:12px;font-size:16px;font-weight:600;cursor:pointer;transition:all 0.3s ease;text-align:left;margin-top:12px">'+(i+1)+'. '+quiz.opzioni[i]+'</div>';
+                    }
+                    html+='</div>';
+                    html+='<div class="quiz-timer" id="quizTimer" style="text-align:center;font-size:18px;color:#fa8c16;font-weight:700;margin-top:15px;padding:12px;background:#fff7e6;border-radius:8px;border:2px solid #fa8c16">⏱ Tempo rimanente: '+tempoRim+'s</div>';
+                    html+='<button id="btnQuiz" class="btn-quiz" style="width:100%;padding:18px;background:linear-gradient(135deg,#fa8c16,#faad14);color:white;border:none;border-radius:12px;font-size:18px;font-weight:bold;cursor:pointer;margin-top:15px">🎯 Invia Risposta</button>';
+                    html+='<div class="message hidden" id="responseQuiz"></div>';
+                    
+                    content.innerHTML=html;
+                    
+                    document.querySelectorAll(".quiz-option").forEach(function(opt){
+                        opt.addEventListener("click",function(){
+                            document.querySelectorAll(".quiz-option").forEach(function(o){
+                                o.style.borderColor="#e0e0e0";
+                                o.style.background="#f9f9f9";
+                                o.style.boxShadow="none";
+                            });
+                            this.style.borderColor="#fa8c16";
+                            this.style.background="#fff7e6";
+                            this.style.boxShadow="0 0 0 3px rgba(250,140,22,0.2)";
+                            selectedOption=this.getAttribute("data-option");
+                        });
+                    });
+                    
+                    document.getElementById("btnQuiz").addEventListener("click",async function(){
+                        var btn=this;
+                        var resp=document.getElementById("responseQuiz");
+                        var nome=document.getElementById("nomeQuiz").value.trim();
+                        
+                        if(!nome){
+                            resp.classList.remove("hidden");
+                            resp.className="message error";
+                            resp.textContent="❌ Inserisci il tuo nome!";
+                            return;
+                        }
+                        
+                        if(!selectedOption){
+                            resp.classList.remove("hidden");
+                            resp.className="message error";
+                            resp.textContent="❌ Seleziona una risposta!";
+                            return;
+                        }
+                        
+                        btn.disabled=true;
+                        btn.textContent="⏳ Invio...";
+                        resp.classList.add("hidden");
+                        
+                        try{
+                            var response=await fetch("/quiz/rispondi",{
+                                method:"POST",
+                                headers:{"Content-Type":"application/json"},
+                                body:JSON.stringify({nome:nome,risposta:parseInt(selectedOption)})
+                            });
+                            var data=await response.json();
+                            resp.classList.remove("hidden");
+                            
+                            if(data.success){
+                                resp.className="message success";
+                                resp.textContent="✅ Risposta inviata correttamente!";
+                                document.getElementById("nomeQuiz").value="";
+                                selectedOption=null;
+                                document.querySelectorAll(".quiz-option").forEach(function(o){
+                                    o.style.borderColor="#e0e0e0";
+                                    o.style.background="#f9f9f9";
+                                    o.style.boxShadow="none";
+                                });
+                            }else{
+                                resp.className="message error";
+                                resp.textContent="❌ "+(data.error||"Errore");
+                            }
+                        }catch(err){
+                            resp.classList.remove("hidden");
+                            resp.className="message error";
+                            resp.textContent="❌ Errore di connessione";
+                        }finally{
+                            btn.disabled=false;
+                            btn.textContent="🎯 Invia Risposta";
+                        }
+                    });
+                }else{
+                    var timerElem=document.getElementById("quizTimer");
+                    if(timerElem){
+                        timerElem.textContent="⏱ Tempo rimanente: "+tempoRim+"s";
+                        if(tempoRim<=10){
+                            timerElem.style.backgroundColor="#fff1f0";
+                            timerElem.style.color="#ff4d4f";
+                            timerElem.style.borderColor="#ff4d4f";
+                        }
+                    }
+                }
+            }else{
+                if(currentQuizId!==null && !quizEnded){
+                    currentQuizId=null;
+                    selectedOption=null;
+                    quizEnded=true;
+                    content.innerHTML='<p style="text-align:center;color:#999;padding:30px">⏳ Attendere inizio del quiz...</p>';
+                }
+            }
+        })
+        .catch(function(err){
+            console.error("Errore quiz:",err);
+        });
+}
+
+setInterval(updateQuiz,1000);
+updateQuiz();
+</script>
+</body></html>'''
+    
+    def do_POST(self):
+        try:
+            length = int(self.headers['Content-Length'])
+            data = json.loads(self.rfile.read(length).decode('utf-8'))
+            
+            if self.path == '/invia':
+                nome = data.get('nome', 'Anonimo')[:50]
+                msg = data.get('messaggio', '')[:500]
+                if not msg.strip():
+                    self.send_json({'success': False, 'error': 'Messaggio vuoto'}, 400)
+                    return
+                ha_insulti_nome, motivo_nome = contiene_insulti(nome)
+                msg_filt = filtra_messaggio(msg)
+                ha_insulti_msg, motivo_msg = contiene_insulti(msg)
+                if ha_insulti_nome or ha_insulti_msg:
+                    motivo = f"NOME: {motivo_nome}" if ha_insulti_nome else ""
+                    if ha_insulti_msg:
+                        motivo += f"{' | ' if motivo else ''}MSG: {motivo_msg}"
+                    db.add_message(nome, msg, msg_filt, self.client_address[0], auto=False, motivo=motivo)
+                    self.send_json({'success': True, 'message': 'Messaggio in moderazione'})
+                else:
+                    db.add_message(nome, msg, msg_filt, self.client_address[0], auto=True)
+                    self.send_json({'success': True, 'message': 'Messaggio pubblicato!'})
+                    
+            elif self.path == '/karaoke':
+                nome = data.get('nome', '')[:50].strip()
+                pin = data.get('pin', '').strip()
+                if not nome:
+                    self.send_json({'success': False, 'error': 'Nome vuoto'}, 400)
+                    return
+                if pin != CURRENT_PIN:
+                    self.send_json({'success': False, 'error': 'PIN errato! Controlla il PIN mostrato vicino al QR Code.'}, 403)
+                    return
+                if db.add_karaoke(nome, self.client_address[0]):
+                    self.send_json({'success': True, 'message': 'Prenotazione effettuata!'})
+                else:
+                    self.send_json({'success': False, 'error': 'Nome già presente'})
+                    
+            elif self.path == '/quiz/rispondi':
+                global QUIZ_ACTIVE, CURRENT_QUIZ, QUIZ_START_TIME
+                if not QUIZ_ACTIVE or not CURRENT_QUIZ:
+                    self.send_json({'success': False, 'error': 'Quiz non attivo'}, 400)
+                    return
+                nome = data.get('nome', '')[:50].strip()
+                risposta = data.get('risposta', 0)
+                if not nome:
+                    self.send_json({'success': False, 'error': 'Nome vuoto'}, 400)
+                    return
+                tempo_risposta = time.time() - QUIZ_START_TIME
+                if tempo_risposta > QUIZ_DURATION:
+                    self.send_json({'success': False, 'error': 'Tempo scaduto!'}, 400)
+                    return
+                corretta = (risposta == CURRENT_QUIZ['risposta_corretta'])
+                punteggio = 0
+                if corretta:
+                    tempo_rimanente = QUIZ_DURATION - tempo_risposta
+                    punteggio = int(100 + (tempo_rimanente / QUIZ_DURATION * 100))
+                db.add_quiz_risposta(CURRENT_QUIZ['id'], nome, str(risposta), 1 if corretta else 0, tempo_risposta, punteggio, self.client_address[0])
+                self.send_json({'success': True, 'corretta': corretta, 'punteggio': punteggio})
+            else:
+                self.send_response(404)
+                self.end_headers()
+        except:
+            self.send_json({'success': False, 'error': 'Errore server'}, 500)
+    
+    def send_json(self, data, status=200):
+        self.send_response(status)
+        self.send_header('Content-type', 'application/json')
+        self.send_header('Access-Control-Allow-Origin', '*')
+        self.send_header('Cache-Control', 'no-cache')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode('utf-8'))
+    
+    def log_message(self, *args): pass
+
+def start_server():
+    HTTPServer(('0.0.0.0', 5000), MessageHandler).serve_forever()
+
+class QRCodeWindow:
+    def __init__(self, root, url, pin, size=400):
+        self.root = root
+        self.root.title("QR Code")
+        self.root.configure(bg='white')
+        self.url = url
+        self.pin = pin
+        self.size = size
+        self.current_public_url = None
+        self.photo = None
+        self._setup_lock = threading.Lock()
+        self.setup_ui()
+        try:
+            self.root.after(1500, self._poll_ngrok)
+        except Exception:
+            threading.Thread(target=self._poll_ngrok_thread, daemon=True).start()
+    
+    def get_active_url(self):
+        return NGROK_URL if NGROK_URL else self.url
+
+    def setup_ui(self):
+        with self._setup_lock:
+            for w in self.root.winfo_children():
+                w.destroy()
+            frame = tk.Frame(self.root, bg='white')
+            frame.pack(fill=tk.BOTH, expand=True, padx=4, pady=4)
+            tk.Label(frame, text=f"PIN: {self.pin}", bg='white', fg='#333', 
+                    font=('Arial', 20, 'bold')).pack(pady=(10, 5))
+            url_to_show = self.get_active_url()
+            try:
+                import qrcode
+                from PIL import Image, ImageTk
+                import io
+                qr = qrcode.QRCode(version=1, error_correction=qrcode.constants.ERROR_CORRECT_L, box_size=10, border=1)
+                qr.add_data(url_to_show)
+                qr.make(fit=True)
+                img = qr.make_image(fill_color="black", back_color="white")
+                buf = io.BytesIO()
+                img.save(buf, 'PNG')
+                buf.seek(0)
+                pil_img = Image.open(buf).resize((self.size, self.size))
+                self.photo = ImageTk.PhotoImage(pil_img)
+                tk.Label(frame, image=self.photo, bg='white').pack(expand=True)
+                self.root.geometry(f"{self.size+10}x{self.size+90}")
+                self.current_public_url = url_to_show
+                tk.Label(frame, text=url_to_show, bg='white', fg='#333', font=('Arial', 10)).pack(pady=(4,0))
+            except ImportError:
+                tk.Label(frame, text="pip install qrcode pillow", fg='red', font=('Arial', 14)).pack(pady=30)
+            except Exception as e:
+                tk.Label(frame, text=f"Errore: {e}", fg='red', font=('Arial', 10)).pack(pady=10)
+    
+    def update_size(self, new_size):
+        self.size = new_size
+        self.setup_ui()
+    
+    def update_pin(self, new_pin):
+        self.pin = new_pin
+        self.setup_ui()
+
+    def update_url(self, new_url):
+        self.url = new_url if not NGROK_URL else self.url
+        active = self.get_active_url()
+        if active != self.current_public_url:
+            self.setup_ui()
+
+    def _poll_ngrok(self):
+        try:
+            active = self.get_active_url()
+            if active != self.current_public_url:
+                self.setup_ui()
+            self.root.after(1500, self._poll_ngrok)
+        except:
+            pass
+
+    def _poll_ngrok_thread(self):
+        while True:
+            time.sleep(1.5)
+            try:
+                active = self.get_active_url()
+                if active != self.current_public_url:
+                    try:
+                        self.root.after(0, self.setup_ui)
+                    except:
+                        pass
+            except:
+                pass
+class QuizWindow:
+    def __init__(self, root):
+        self.root = root
+        self.root.title("Quiz Display")
+        self.root.geometry("800x600")
+        self.root.configure(bg='#fa8c16')
+        self.container = tk.Frame(root, bg='#fa8c16')
+        self.container.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        self.show_waiting()
+    
+    def show_waiting(self):
+        for w in self.container.winfo_children():
+            w.destroy()
+        tk.Label(self.container, text="⏳ In attesa del quiz...", 
+                font=('Arial', 32, 'bold'), bg='#fa8c16', fg='white').pack(expand=True)
+    
+    def show_quiz(self, quiz, tempo_rimanente):
+        for w in self.container.winfo_children():
+            w.destroy()
+        header_frame = tk.Frame(self.container, bg='#fa8c16')
+        header_frame.pack(fill=tk.X, pady=(0, 20))
+        tk.Label(header_frame, text="🎯 QUIZ", font=('Arial', 24, 'bold'), 
+                bg='#fa8c16', fg='white').pack()
+        self.timer_label = tk.Label(header_frame, text=f"⏱ Tempo: {int(tempo_rimanente)}s", 
+                                    font=('Arial', 18, 'bold'), bg='#fa8c16', fg='#fff')
+        self.timer_label.pack(pady=10)
+        question_frame = tk.Frame(self.container, bg='white', relief=tk.RAISED, bd=3)
+        question_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        tk.Label(question_frame, text=quiz['domanda'], font=('Arial', 28, 'bold'), 
+                bg='white', fg='#333', wraplength=700, justify=tk.CENTER).pack(expand=True, padx=20, pady=20)
+        options_frame = tk.Frame(self.container, bg='#fa8c16')
+        options_frame.pack(fill=tk.X, pady=10)
+        for i, opzione in enumerate(quiz['opzioni'], 1):
+            opt_frame = tk.Frame(options_frame, bg='#fff7e6', relief=tk.RAISED, bd=2)
+            opt_frame.pack(fill=tk.X, pady=5)
+            tk.Label(opt_frame, text=f"{i}. {opzione}", font=('Arial', 20, 'bold'), 
+                    bg='#fff7e6', fg='#333', anchor='w', padx=20, pady=15).pack(fill=tk.X)
+    
+    def update_timer(self, tempo_rimanente):
+        if hasattr(self, 'timer_label') and self.timer_label.winfo_exists():
+            self.timer_label.config(text=f"⏱ Tempo: {int(tempo_rimanente)}s")
+            if tempo_rimanente <= 10:
+                self.timer_label.config(fg='#ff4d4f')
+
+class QuizFormWindow:
+    def __init__(self, root, callback):
+        self.root = root
+        self.root.title("Crea Nuovo Quiz")
+        self.root.geometry("700x600")
+        self.root.configure(bg='#f0f2f5')
+        self.callback = callback
+        title_frame = tk.Frame(root, bg='#fa8c16', height=80)
+        title_frame.pack(fill=tk.X)
+        title_frame.pack_propagate(False)
+        tk.Label(title_frame, text="🎯 CREA NUOVO QUIZ", font=('Segoe UI', 22, 'bold'), 
+                bg='#fa8c16', fg='white').pack(expand=True)
+        container = tk.Frame(root, bg='#f0f2f5')
+        container.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
+        tk.Label(container, text="Domanda:", font=('Segoe UI', 11, 'bold'), 
+                bg='#f0f2f5', fg='#333').pack(anchor='w', pady=(0, 5))
+        self.domanda_entry = tk.Text(container, font=('Segoe UI', 11), height=3, 
+                                     relief=tk.SOLID, bd=1, wrap=tk.WORD)
+        self.domanda_entry.pack(fill=tk.X, pady=(0, 20))
+        tk.Label(container, text="Opzioni di risposta:", font=('Segoe UI', 11, 'bold'), 
+                bg='#f0f2f5', fg='#333').pack(anchor='w', pady=(0, 10))
+        self.opzioni_entries = []
+        for i in range(4):
+            opt_frame = tk.Frame(container, bg='#f0f2f5')
+            opt_frame.pack(fill=tk.X, pady=5)
+            tk.Label(opt_frame, text=f"{i+1}.", font=('Segoe UI', 11, 'bold'), 
+                    bg='#f0f2f5', fg='#fa8c16', width=2).pack(side=tk.LEFT)
+            entry = tk.Entry(opt_frame, font=('Segoe UI', 11), relief=tk.SOLID, bd=1)
+            entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(5, 0))
+            self.opzioni_entries.append(entry)
+        bottom_frame = tk.Frame(container, bg='#f0f2f5')
+        bottom_frame.pack(fill=tk.X, pady=(20, 0))
+        left_frame = tk.Frame(bottom_frame, bg='#f0f2f5')
+        left_frame.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 10))
+        tk.Label(left_frame, text="Risposta corretta (1-4):", font=('Segoe UI', 11, 'bold'), 
+                bg='#f0f2f5', fg='#333').pack(anchor='w', pady=(0, 5))
+        self.risposta_var = tk.IntVar(value=1)
+        resp_frame = tk.Frame(left_frame, bg='#f0f2f5')
+        resp_frame.pack(anchor='w')
+        for i in range(1, 5):
+            tk.Radiobutton(resp_frame, text=str(i), variable=self.risposta_var, value=i,
+                          font=('Segoe UI', 11, 'bold'), bg='#f0f2f5', fg='#fa8c16',
+                          selectcolor='#fff7e6', activebackground='#f0f2f5').pack(side=tk.LEFT, padx=10)
+        right_frame = tk.Frame(bottom_frame, bg='#f0f2f5')
+        right_frame.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        tk.Label(right_frame, text="Durata (secondi):", font=('Segoe UI', 11, 'bold'), 
+                bg='#f0f2f5', fg='#333').pack(anchor='w', pady=(0, 5))
+        self.durata_var = tk.IntVar(value=30)
+        durata_frame = tk.Frame(right_frame, bg='#f0f2f5')
+        durata_frame.pack(anchor='w')
+        tk.Scale(durata_frame, from_=10, to=120, orient=tk.HORIZONTAL, variable=self.durata_var,
+                bg='#f0f2f5', fg='#333', troughcolor='#d0d0d0', length=200, font=('Segoe UI', 10, 'bold')).pack()
+        btn_frame = tk.Frame(container, bg='#f0f2f5')
+        btn_frame.pack(pady=(30, 0))
+        tk.Button(btn_frame, text="✅ Avvia Quiz", command=self.submit, 
+                 bg='#52c41a', fg='white', font=('Segoe UI', 12, 'bold'), 
+                 padx=30, pady=12, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=5)
+        tk.Button(btn_frame, text="❌ Annulla", command=self.root.destroy, 
+                 bg='#ff4d4f', fg='white', font=('Segoe UI', 12, 'bold'), 
+                 padx=30, pady=12, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=5)
+    
+    def submit(self):
+        domanda = self.domanda_entry.get("1.0", tk.END).strip()
+        if not domanda:
+            messagebox.showerror("Errore", "Inserisci la domanda!")
+            return
+        opzioni = []
+        for i, entry in enumerate(self.opzioni_entries, 1):
+            opt = entry.get().strip()
+            if not opt:
+                messagebox.showerror("Errore", f"Inserisci l'opzione {i}!")
+                return
+            opzioni.append(opt)
+        risposta_corretta = self.risposta_var.get()
+        durata = self.durata_var.get()
+        self.callback(domanda, opzioni, risposta_corretta, durata)
+        self.root.destroy()
+
+class QuizViewWindow:
+    def __init__(self, root, control_panel):
+        self.root = root
+        self.root.title("Visualizza Quiz")
+        self.root.geometry("1000x700")
+        self.root.configure(bg='#fa8c16')
+        self.control_panel = control_panel
+        self.quiz_started = False
+        self.quiz_font_size = control_panel.quiz_font_size
+        self.results_shown = False
+        self.container = tk.Frame(root, bg='#fa8c16')
+        self.container.pack(fill=tk.BOTH, expand=True, padx=30, pady=30)
+        self.show_waiting()
+        self.check_quiz_status()
+    
+    def show_waiting(self):
+        for w in self.container.winfo_children():
+            w.destroy()
+        tk.Label(self.container, text="?", 
+                font=('Arial', int(self.quiz_font_size*4), 'bold'), bg='#fa8c16', fg='white').pack(expand=True)
+    
+    def show_question(self, quiz):
+        for w in self.container.winfo_children():
+            w.destroy()
+        
+        # Header
+        header_frame = tk.Frame(self.container, bg='#fa8c16')
+        header_frame.pack(fill=tk.X, pady=(0, int(self.quiz_font_size*0.4)))
+        title_size = int(self.quiz_font_size*0.75)
+        tk.Label(header_frame, text="🎯 QUIZ", font=('Arial', title_size, 'bold'),
+                 bg='#fa8c16', fg='white').pack()
+        timer_size = int(self.quiz_font_size*0.5)
+        self.timer_label = tk.Label(header_frame, text=f"⏱ Tempo: {int(QUIZ_DURATION)}s",
+                                    font=('Arial', timer_size, 'bold'), bg='#fa8c16', fg='#fff')
+        self.timer_label.pack(pady=int(self.quiz_font_size*0.2))
+        
+        # Domanda centrale
+        question_frame = tk.Frame(self.container, bg='white', relief=tk.RAISED, bd=int(self.quiz_font_size*0.12))
+        question_frame.pack(fill=tk.BOTH, expand=True, pady=int(self.quiz_font_size*0.4))
+        padding_x = int(self.quiz_font_size*1.2)
+        padding_y = int(self.quiz_font_size*0.8)
+        wraplength = int(900 * (self.quiz_font_size / 32))
+        self.question_label = tk.Label(question_frame, text=quiz['domanda'],
+                font=('Arial', self.quiz_font_size, 'bold'),
+                bg='white', fg='#333', wraplength=wraplength, justify=tk.CENTER)
+        self.question_label.pack(expand=True, padx=padding_x, pady=padding_y)
+        
+        # Opzioni
+        options_frame = tk.Frame(self.container, bg='#fa8c16')
+        options_frame.pack(fill=tk.X, pady=int(self.quiz_font_size*0.4))
+        option_font_size = int(self.quiz_font_size*0.65)
+        option_padding_x = int(self.quiz_font_size*0.6)
+        option_padding_y = int(self.quiz_font_size*0.4)
+        option_spacing = int(self.quiz_font_size*0.2)
+        for i, opzione in enumerate(quiz['opzioni'], 1):
+            opt_frame = tk.Frame(options_frame, bg='#fff7e6', relief=tk.RAISED, bd=int(self.quiz_font_size*0.08))
+            opt_frame.pack(fill=tk.X, pady=option_spacing)
+            tk.Label(opt_frame, text=f"{i}. {opzione}", font=('Arial', option_font_size, 'bold'),
+                    bg='#fff7e6', fg='#333', anchor='w', padx=option_padding_x, pady=option_padding_y).pack(fill=tk.X)
+    
+    def update_timer_display(self, tempo_rimanente):
+        if hasattr(self, 'timer_label') and self.timer_label.winfo_exists():
+            self.timer_label.config(text=f"⏱ Tempo: {int(tempo_rimanente)}s")
+            if tempo_rimanente <= 10:
+                self.timer_label.config(fg='#ff4d4f')
+    
+    def show_results(self, quiz, risposte):
+        if self.results_shown:
+            return
+        self.results_shown = True
+        for w in self.container.winfo_children():
+            w.destroy()
+        # Titolo
+        title_size = int(self.quiz_font_size*0.75)
+        tk.Label(self.container, text="🎯 QUIZ TERMINATO!", font=('Arial', title_size, 'bold'), 
+                bg='#fa8c16', fg='white').pack(pady=(0, int(self.quiz_font_size*0.4)))
+        # Domanda
+        question_size = int(self.quiz_font_size*0.5)
+        question_frame = tk.Frame(self.container, bg='white', relief=tk.RAISED, bd=int(self.quiz_font_size*0.08))
+        question_frame.pack(fill=tk.X, pady=int(self.quiz_font_size*0.2))
+        tk.Label(question_frame, text=quiz['domanda'], font=('Arial', question_size, 'bold'), 
+                bg='white', fg='#333', wraplength=900, justify=tk.CENTER).pack(padx=int(self.quiz_font_size*0.6), pady=int(self.quiz_font_size*0.4))
+        # Risposta corretta
+        correct_size = int(self.quiz_font_size*0.55)
+        correct_frame = tk.Frame(self.container, bg='#d4edda', relief=tk.SOLID, bd=int(self.quiz_font_size*0.08))
+        correct_frame.pack(fill=tk.X, pady=int(self.quiz_font_size*0.2))
+        tk.Label(correct_frame, text=f"✅ LA RISPOSTA CORRETTA ERA:\n{quiz['risposta_corretta']}. {quiz['opzioni'][quiz['risposta_corretta']-1]}", 
+                font=('Arial', correct_size, 'bold'), bg='#d4edda', fg='#155724', justify=tk.CENTER).pack(pady=int(self.quiz_font_size*0.4))
+        # Vincitori o nessun vincitore
+        if risposte:
+            winner_title_size = int(self.quiz_font_size*0.8)
+            tk.Label(self.container, text="🏆 VINCITORI 🏆", font=('Arial', winner_title_size, 'bold'), 
+                    bg='#fa8c16', fg='white').pack(pady=(int(self.quiz_font_size*0.4), int(self.quiz_font_size*0.2)))
+            winners_frame = tk.Frame(self.container, bg='#fa8c16')
+            winners_frame.pack(fill=tk.BOTH, expand=True, pady=int(self.quiz_font_size*0.2))
+            canvas = tk.Canvas(winners_frame, bg='#fa8c16', highlightthickness=0)
+            scrollbar = ttk.Scrollbar(winners_frame, orient="vertical", command=canvas.yview)
+            scrollable = tk.Frame(canvas, bg='#fa8c16')
+            scrollable.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+            canvas.create_window((0, 0), window=scrollable, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            for idx, (rid, nome, risposta, corretta, tempo, punti, ts) in enumerate(risposte[:10], 1):
+                if corretta:
+                    self.create_winner_card(scrollable, idx, nome, punti, tempo)
+        else:
+            no_winner_size = int(self.quiz_font_size*0.6)
+            tk.Label(self.container, text="Nessuna risposta corretta ricevuta", 
+                    font=('Arial', no_winner_size), bg='#fa8c16', fg='white').pack(pady=int(self.quiz_font_size*1.2))
+    
+    def create_winner_card(self, parent, pos, nome, punti, tempo):
+        card_padding = int(self.quiz_font_size*0.6)
+        card = tk.Frame(parent, bg='#fff7e6', relief=tk.RAISED, bd=int(self.quiz_font_size*0.08))
+        card.pack(fill=tk.X, pady=int(self.quiz_font_size*0.2), padx=int(self.quiz_font_size*0.4))
+        left_frame = tk.Frame(card, bg='#fff7e6')
+        left_frame.pack(side=tk.LEFT, padx=card_padding, pady=int(self.quiz_font_size*0.3))
+        medal = "🥇" if pos == 1 else "🥈" if pos == 2 else "🥉" if pos == 3 else f"{pos}°"
+        medal_size = int(self.quiz_font_size*0.9)
+        tk.Label(left_frame, text=medal, font=('Arial', medal_size, 'bold'), bg='#fff7e6').pack()
+        center_frame = tk.Frame(card, bg='#fff7e6')
+        center_frame.pack(side=tk.LEFT, fill=tk.X, expand=True, pady=int(self.quiz_font_size*0.3))
+        name_size = int(self.quiz_font_size*0.7)
+        tk.Label(center_frame, text=nome, font=('Arial', name_size, 'bold'), 
+                bg='#fff7e6', fg='#333', anchor='w').pack(anchor='w')
+        right_frame = tk.Frame(card, bg='#fff7e6')
+        right_frame.pack(side=tk.RIGHT, padx=card_padding, pady=int(self.quiz_font_size*0.3))
+        points_size = int(self.quiz_font_size*0.6)
+        tk.Label(right_frame, text=f"{punti} punti", font=('Arial', points_size, 'bold'), 
+                bg='#fff7e6', fg='#fa8c16').pack()
+        time_size = int(self.quiz_font_size*0.4)
+        tk.Label(right_frame, text=f"⏱ {tempo:.1f}s", font=('Arial', time_size), 
+                bg='#fff7e6', fg='#666').pack()
+    
+    def check_quiz_status(self):
+        global QUIZ_ACTIVE, CURRENT_QUIZ
+        try:
+            if QUIZ_ACTIVE and CURRENT_QUIZ and self.quiz_started:
+                if not hasattr(self, 'question_label'):  # è la waiting screen
+                    self.show_question(CURRENT_QUIZ)
+                else:
+                    tempo_trascorso = time.time() - QUIZ_START_TIME
+                    tempo_rimanente = QUIZ_DURATION - tempo_trascorso
+                    if tempo_rimanente > 0:
+                        self.update_timer_display(tempo_rimanente)
+            elif not QUIZ_ACTIVE and CURRENT_QUIZ and self.control_panel.current_quiz_id > 0 and self.quiz_started and not self.results_shown:
+                risposte = db.get_quiz_risposte(self.control_panel.current_quiz_id)
+                self.show_results(CURRENT_QUIZ, risposte)
+            elif CURRENT_QUIZ and not self.quiz_started:
+                self.show_waiting()
+            self.root.after(1000, self.check_quiz_status)
+        except:
+            pass
+    
+    def start_display(self):
+        self.quiz_started = True
+        self.results_shown = False
+
+    def update_font_size(self, size):
+        """Aggiorna il font della finestra in qualunque stato proporzionalmente, sia domanda che classifica."""
+        self.quiz_font_size = size
+        if hasattr(self, 'question_label') and self.quiz_started and QUIZ_ACTIVE and CURRENT_QUIZ and self.question_label.winfo_exists():
+            self.show_question(CURRENT_QUIZ)
+        elif self.results_shown and CURRENT_QUIZ:
+            risposte = db.get_quiz_risposte(self.control_panel.current_quiz_id)
+            self.results_shown = False
+            self.show_results(CURRENT_QUIZ, risposte)
+        else:
+            self.show_waiting()
+
+
+# ==================== CLASSI APPLAUSOMETRO ====================
+
+class FinestraApplausometro:
+    """Finestra applausometro - Design pulito minimalista"""
+    
+    def __init__(self):
+        self.window = tk.Toplevel()
+        self.window.title("🎤 APPLAUSOMETRO")
+        self.window.geometry("1200x800")
+        self.window.configure(bg="#000000")
+        
+        self.canvas = tk.Canvas(
+            self.window,
+            bg="#000000",
+            highlightthickness=0
+        )
+        self.canvas.pack(fill=tk.BOTH, expand=True)
+        
+        # Inizializza SUBITO le variabili di stato
+        self.ultimo_stato = None
+        self.ultimo_volume = 0
+        self.ultimo_picco = 0
+        self.ultimo_tempo = 0
+        self.ultimo_nome = ""
+        
+        # Bind resize DOPO aver inizializzato le variabili
+        self.canvas.bind("<Configure>", self.on_resize)
+        
+        self.window.update_idletasks()
+        self.window.update()
+        
+        self.window.after(50, self.mostra_in_attesa)
+    
+    def on_resize(self, event):
+        """Ridisegna quando la finestra viene ridimensionata"""
+        if not hasattr(self, 'ultimo_stato') or self.ultimo_stato is None:
+            return
+            
+        if self.ultimo_stato == "attesa":
+            self.ridisegna_attesa()
+        elif self.ultimo_stato and self.ultimo_stato.startswith("countdown_"):
+            numero = int(self.ultimo_stato.split("_")[1])
+            self.ridisegna_countdown(numero)
+        elif self.ultimo_stato == "registrazione":
+            self.ridisegna_volume(self.ultimo_volume, self.ultimo_picco, self.ultimo_tempo, self.ultimo_nome)
+        elif self.ultimo_stato == "stop":
+            self.ridisegna_stop()
+        elif self.ultimo_stato == "risultato":
+            self.ridisegna_risultato(self.ultimo_volume, self.ultimo_nome)
+    
+    def ridisegna_attesa(self):
+        """Ridisegna stato attesa"""
+        self.canvas.delete("all")
+        
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        
+        self.canvas.create_text(
+            w/2, h*0.4,
+            text="IN ATTESA",
+            font=("Helvetica", int(h*0.08), "bold"),
+            fill="#00d4ff",
+            tags="contenuto"
+        )
+        
+        self.disegna_barra(0, 0)
+    
+    def mostra_in_attesa(self):
+        """Stato attesa"""
+        if self.ultimo_stato == "attesa":
+            return
+        self.ultimo_stato = "attesa"
+        self.ridisegna_attesa()
+    
+    def ridisegna_countdown(self, numero):
+        """Ridisegna countdown"""
+        self.canvas.delete("all")
+        
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        
+        self.canvas.create_text(
+            w/2, h/2,
+            text=str(numero),
+            font=("Helvetica", int(min(w, h)*0.3), "bold"),
+            fill="#00ffff",
+            tags="numero"
+        )
+    
+    def mostra_countdown_iniziale(self, numero):
+        """Countdown rapido 3-2-1"""
+        if self.ultimo_stato == f"countdown_{numero}":
+            return
+        self.ultimo_stato = f"countdown_{numero}"
+        self.ridisegna_countdown(numero)
+    
+    def mostra_applaudire(self, nome_concorrente):
+        """APPLAUDIRE - Layout pulito"""
+        if self.ultimo_stato == "applaudire":
+            return
+        self.ultimo_stato = "applaudire"
+        self.ultimo_nome = nome_concorrente
+        
+        self.canvas.delete("all")
+        
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        
+        # Sfondo NERO
+        self.canvas.create_rectangle(0, 0, w, h, fill="#000000", outline="")
+        
+        # NOME CONCORRENTE centrato in alto
+        self.canvas.create_text(
+            w/2, h*0.08,
+            text=nome_concorrente,
+            font=("Helvetica", int(h*0.05), "bold"),
+            fill="#ffffff",
+            tags="nome"
+        )
+        
+        # BANNER ROSSO
+        banner_top = h * 0.15
+        banner_bottom = h * 0.30
+        
+        self.canvas.create_rectangle(
+            0, banner_top,
+            w, banner_bottom,
+            fill="#cc0000",
+            outline="",
+            tags="banner"
+        )
+        
+        # Testo APPLAUDIRE centrato nel banner
+        self.canvas.create_text(
+            w/2, (banner_top + banner_bottom) / 2,
+            text="👏 APPLAUDIRE! 👏",
+            font=("Helvetica", int(h*0.08), "bold"),
+            fill="#ffffff",
+            tags="banner"
+        )
+    
+    def ridisegna_volume(self, volume, picco, tempo_rimanente, nome_concorrente):
+        """Ridisegna volume - Timer sotto banner"""
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        
+        # Cancella solo elementi dinamici
+        self.canvas.delete("timer")
+        self.canvas.delete("barra")
+        
+        # Timer digitale SOTTO il banner
+        secondi = int(tempo_rimanente)
+        if secondi >= 1:
+            self.canvas.create_text(
+                w/2, h*0.50,
+                text=str(secondi),
+                font=("Helvetica", int(h*0.25), "bold"),
+                fill="#ff6600",
+                tags="timer"
+            )
+        
+        # Barra in basso
+        self.disegna_barra(volume, picco)
+    
+    def aggiorna_volume(self, volume, picco, tempo_rimanente, nome_concorrente):
+        """Aggiornamento live"""
+        self.ultimo_stato = "registrazione"
+        self.ultimo_volume = volume
+        self.ultimo_picco = picco
+        self.ultimo_tempo = tempo_rimanente
+        self.ultimo_nome = nome_concorrente
+        self.ridisegna_volume(volume, picco, tempo_rimanente, nome_concorrente)
+    
+    def ridisegna_stop(self):
+        """Ridisegna stop"""
+        self.canvas.delete("all")
+        
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        
+        self.canvas.create_rectangle(0, 0, w, h, fill="#1a0000", outline="")
+        
+        size = min(w, h) * 0.25
+        self.canvas.create_rectangle(
+            w/2-size/2, h/2-size/2,
+            w/2+size/2, h/2+size/2,
+            fill="#ff0000",
+            outline="#ffffff",
+            width=8
+        )
+        
+        self.canvas.create_text(
+            w/2, h/2 + size*0.7,
+            text="STOP",
+            font=("Helvetica", int(h*0.06), "bold"),
+            fill="#ffffff"
+        )
+    
+    def mostra_stop(self):
+        """STOP"""
+        if self.ultimo_stato == "stop":
+            return
+        self.ultimo_stato = "stop"
+        self.ridisegna_stop()
+    
+    def ridisegna_risultato(self, punteggio, nome_concorrente):
+        """Ridisegna risultato - SENZA barre valutazione"""
+        self.canvas.delete("all")
+        
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        
+        # Nome concorrente in alto
+        self.canvas.create_text(
+            w/2, h*0.25,
+            text=nome_concorrente,
+            font=("Helvetica", int(h*0.06), "bold"),
+            fill="#00ffff"
+        )
+        
+        # Box punteggio PIÙ GRANDE E CENTRATO
+        box_h = h * 0.25
+        self.canvas.create_rectangle(
+            w*0.20, h*0.35,
+            w*0.80, h*0.35 + box_h,
+            fill="#1a1a3e",
+            outline="#00ffff",
+            width=5
+        )
+        
+        self.canvas.create_text(
+            w/2, h*0.35 + box_h*0.3,
+            text="PUNTEGGIO FINALE",
+            font=("Helvetica", int(h*0.04), "bold"),
+            fill="#ffffff"
+        )
+        
+        # Punteggio GIGANTE
+        self.canvas.create_text(
+            w/2, h*0.35 + box_h*0.7,
+            text=f"{punteggio:.1f}",
+            font=("Helvetica", int(h*0.12), "bold"),
+            fill="#00ffff"
+        )
+        
+        # Barra in basso
+        self.disegna_barra(punteggio, punteggio)
+    
+    def mostra_risultato(self, punteggio, nome_concorrente):
+        """Risultato"""
+        if self.ultimo_stato == "risultato":
+            return
+        self.ultimo_stato = "risultato"
+        self.ultimo_volume = punteggio
+        self.ultimo_nome = nome_concorrente
+        self.ridisegna_risultato(punteggio, nome_concorrente)
+    
+    def disegna_barra(self, volume, picco):
+        """Barra pulita - SOLO visuale"""
+        w = self.canvas.winfo_width()
+        h = self.canvas.winfo_height()
+        
+        bar_width = w * 0.85
+        bar_height = h * 0.08
+        bar_x = (w - bar_width) / 2
+        bar_y = h * 0.82
+        
+        # Sfondo barra
+        self.canvas.create_rectangle(
+            bar_x, bar_y,
+            bar_x + bar_width, bar_y + bar_height,
+            fill="#0a0a1a",
+            outline="#666666",
+            width=3,
+            tags="barra"
+        )
+        
+        # Barra PICCO (arancione, sotto)
+        fill_picco = (bar_width - 8) * (picco / 100)
+        
+        if fill_picco > 0:
+            self.canvas.create_rectangle(
+                bar_x + 4, bar_y + 4,
+                bar_x + 4 + fill_picco, bar_y + bar_height - 4,
+                fill="#ffa500",
+                outline="",
+                tags="barra"
+            )
+        
+        # Barra CORRENTE (colorata, sopra)
+        fill_current = (bar_width - 8) * (volume / 100)
+        
+        if fill_current > 0:
+            if volume < 33:
+                color = "#00ff88"
+            elif volume < 66:
+                color = "#ffdd00"
+            else:
+                color = "#ff0055"
+            
+            self.canvas.create_rectangle(
+                bar_x + 4, bar_y + bar_height*0.2,
+                bar_x + 4 + fill_current, bar_y + bar_height*0.8,
+                fill=color,
+                outline="",
+                tags="barra"
+            )
+class FinestraClassifica(tk.Toplevel):
+    """Classifica moderna"""
+    
+    def __init__(self, logs_ordinati, controller):
+        super().__init__()
+        self.title("🏆 CLASSIFICA FINALE")
+        self.geometry("950x750")
+        self.configure(bg="#000000")
+        
+        self.controller = controller
+        self.logs_ordinati = logs_ordinati
+        self.top_3_indices = self.trova_top_3()
+        
+        tk.Label(
+            self,
+            text="🏆 CLASSIFICA FINALE 🏆",
+            font=("Helvetica", 42, "bold"),
+            bg="#000000",
+            fg="#00ffff"
+        ).pack(pady=25)
+        
+        tk.Label(
+            self,
+            text="Dal punteggio più basso al più alto",
+            font=("Helvetica", 14),
+            bg="#000000",
+            fg="#999999"
+        ).pack(pady=(0, 20))
+        
+        self.concorrenti_frame = tk.Frame(self, bg="#000000")
+        self.concorrenti_frame.pack(fill=tk.BOTH, expand=True, padx=35, pady=(10, 25))
+        
+        self.aggiorna_visualizzazione(logs_ordinati, 0)
+    
+    def trova_top_3(self):
+        if not self.logs_ordinati:
+            return []
+        
+        temp_sorted = sorted(enumerate(self.logs_ordinati), 
+                           key=lambda x: x[1]['punteggio'], 
+                           reverse=True)
+        
+        return [temp_sorted[i][0] for i in range(min(3, len(temp_sorted)))]
+    
+    def aggiorna_visualizzazione(self, logs_ordinati, posizione):
+        for widget in self.concorrenti_frame.winfo_children():
+            widget.destroy()
+        
+        self.logs_ordinati = logs_ordinati
+        self.top_3_indices = self.trova_top_3()
+        
+        inizio = posizione
+        fine = min(posizione + 5, len(logs_ordinati))
+        
+        concorrenti_da_mostrare = logs_ordinati[inizio:fine]
+        
+        for idx, entry in enumerate(concorrenti_da_mostrare):
+            index_globale = inizio + idx
+            posizione_reale = index_globale + 1
+            
+            pos_frame = tk.Frame(
+                self.concorrenti_frame,
+                bg="#1a1a3e",
+                relief=tk.FLAT,
+                bd=0
+            )
+            pos_frame.pack(fill=tk.X, pady=8)
+            
+            border_color = "#00ffaa" if index_globale in self.top_3_indices else "#333366"
+            tk.Frame(
+                pos_frame,
+                bg=border_color,
+                width=6
+            ).pack(side=tk.LEFT, fill=tk.Y)
+            
+            medaglia = ""
+            if index_globale in self.top_3_indices:
+                rank = self.top_3_indices.index(index_globale)
+                medaglie = ["🥇", "🥈", "🥉"]
+                medaglia = medaglie[rank]
+            
+            display_text = f"{posizione_reale}° {medaglia}" if medaglia else f"{posizione_reale}°"
+            
+            content_frame = tk.Frame(pos_frame, bg="#1a1a3e")
+            content_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=15, pady=10)
+            
+            tk.Label(
+                content_frame,
+                text=display_text,
+                font=("Helvetica", 32, "bold"),
+                bg="#1a1a3e",
+                fg="#00ffff" if medaglia else "#ffffff",
+                width=5,
+                anchor="w"
+            ).pack(side=tk.LEFT, padx=10)
+            
+            tk.Label(
+                content_frame,
+                text=entry['concorrente'],
+                font=("Helvetica", 24, "bold"),
+                bg="#1a1a3e",
+                fg="#ffffff",
+                anchor="w"
+            ).pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
+            
+            tk.Label(
+                content_frame,
+                text=f"{entry['punteggio']:.2f}",
+                font=("Helvetica", 32, "bold"),
+                bg="#1a1a3e",
+                fg="#00ff88"
+            ).pack(side=tk.RIGHT, padx=20)
+
+
+class FinestraControlloApplausometro:
+    """Finestra di controllo per gestire l'applausometro"""
+    
+    def __init__(self, parent_window=None):
+        self.root = tk.Toplevel(parent_window) if parent_window else tk.Tk()
+        self.root.title("🎛️ Pannello di Controllo - Applausometro")
+        
+        # File configurazione
+        self.config_file = "applausometro_config.json"
+        self.config = self.carica_configurazione()
+        
+        # Applica geometria salvata
+        geometry = self.config.get('window_geometry', '700x680')
+        self.root.geometry(geometry)
+        self.root.resizable(True, True)
+        
+        # Variabili
+        self.applausometro_window = None
+        self.classifica_window = None
+        self.microfono_selezionato = tk.IntVar(value=0)
+        self.is_running = False
+        self.log_file = "applausometro_log.json"
+        self.sensibilita = tk.DoubleVar(value=50.0)
+        self.soglia_rumore = tk.DoubleVar(value=2.0)
+        self.posizione_classifica = tk.IntVar(value=0)
+        
+        # Setup UI
+        self.setup_ui()
+        self.carica_microfoni()
+        self.carica_log()
+        
+        # Applica larghezze colonne salvate
+        self.applica_larghezze_colonne()
+        
+        # Bind per salvare configurazione
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
+        self.root.bind("<Configure>", self.on_window_resize)
+        
+    def carica_configurazione(self):
+        """Carica configurazione salvata"""
+        if os.path.exists(self.config_file):
+            try:
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                return {}
+        return {}
+    
+    def salva_configurazione(self):
+        """Salva configurazione attuale"""
+        try:
+            self.config['window_geometry'] = self.root.geometry()
+            self.config['column_widths'] = {
+                'pos': self.tree.column('pos', 'width'),
+                'nome': self.tree.column('nome', 'width'),
+                'punteggio': self.tree.column('punteggio', 'width')
+            }
+            
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(self.config, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"Errore nel salvare configurazione: {e}")
+    
+    def on_window_resize(self, event):
+        """Salva dimensioni quando la finestra viene ridimensionata"""
+        if hasattr(self, '_resize_timer'):
+            self.root.after_cancel(self._resize_timer)
+        self._resize_timer = self.root.after(500, self.salva_configurazione)
+    
+    def applica_larghezze_colonne(self):
+        """Applica larghezze colonne salvate"""
+        if 'column_widths' in self.config:
+            widths = self.config['column_widths']
+            if 'pos' in widths:
+                self.tree.column('pos', width=widths['pos'])
+            if 'nome' in widths:
+                self.tree.column('nome', width=widths['nome'])
+            if 'punteggio' in widths:
+                self.tree.column('punteggio', width=widths['punteggio'])
+        
+    def setup_ui(self):
+        """Configura l'interfaccia della finestra di controllo"""
+        
+        # Titolo compatto
+        title_frame = tk.Frame(self.root, bg="#2c3e50", height=45)
+        title_frame.pack(fill=tk.X)
+        title_frame.pack_propagate(False)
+        
+        tk.Label(
+            title_frame, 
+            text="🎤 APPLAUSOMETRO", 
+            font=("Arial", 14, "bold"),
+            bg="#2c3e50",
+            fg="white"
+        ).pack(expand=True)
+        
+        # Frame selezione microfono compatto
+        mic_frame = tk.LabelFrame(
+            self.root, 
+            text="🎙️ Microfono", 
+            font=("Arial", 8, "bold"),
+            padx=8,
+            pady=3
+        )
+        mic_frame.pack(fill=tk.X, padx=8, pady=2)
+        
+        mic_inner = tk.Frame(mic_frame)
+        mic_inner.pack(fill=tk.X)
+        
+        self.mic_combo = ttk.Combobox(
+            mic_inner,
+            state="readonly",
+            font=("Arial", 8)
+        )
+        self.mic_combo.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        
+        tk.Button(
+            mic_inner,
+            text="🔄",
+            command=self.carica_microfoni,
+            font=("Arial", 7),
+            width=3
+        ).pack(side=tk.LEFT, padx=(3, 0))
+        
+        # Frame sensibilità POTENZIATA
+        sens_frame = tk.LabelFrame(
+            self.root,
+            text="🔊 Sensibilità Microfono",
+            font=("Arial", 8, "bold"),
+            padx=8,
+            pady=3
+        )
+        sens_frame.pack(fill=tk.X, padx=8, pady=2)
+        
+        sens_inner = tk.Frame(sens_frame)
+        sens_inner.pack(fill=tk.X)
+        
+        self.sens_label = tk.Label(
+            sens_inner,
+            text=f"{self.sensibilita.get():.0f}x",
+            font=("Arial", 8, "bold"),
+            width=5,
+            fg="red"
+        )
+        self.sens_label.pack(side=tk.LEFT)
+        
+        sens_scale = tk.Scale(
+            sens_inner,
+            from_=1.0,
+            to=200.0,
+            resolution=1.0,
+            orient=tk.HORIZONTAL,
+            variable=self.sensibilita,
+            command=self.aggiorna_sensibilita,
+            showvalue=0
+        )
+        sens_scale.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=3)
+        
+        tk.Label(
+            sens_inner,
+            text="← Aumenta se non registra",
+            font=("Arial", 7, "bold"),
+            fg="red"
+        ).pack(side=tk.LEFT, padx=3)
+        
+        # Frame soglia rumore
+        soglia_frame = tk.LabelFrame(
+            self.root,
+            text="🔇 Soglia Minima",
+            font=("Arial", 8, "bold"),
+            padx=8,
+            pady=3
+        )
+        soglia_frame.pack(fill=tk.X, padx=8, pady=2)
+        
+        soglia_inner = tk.Frame(soglia_frame)
+        soglia_inner.pack(fill=tk.X)
+        
+        self.soglia_label = tk.Label(
+            soglia_inner,
+            text=f"{self.soglia_rumore.get():.1f}%",
+            font=("Arial", 8),
+            width=5
+        )
+        self.soglia_label.pack(side=tk.LEFT)
+        
+        soglia_scale = tk.Scale(
+            soglia_inner,
+            from_=0.0,
+            to=20.0,
+            resolution=0.5,
+            orient=tk.HORIZONTAL,
+            variable=self.soglia_rumore,
+            command=self.aggiorna_soglia,
+            showvalue=0
+        )
+        soglia_scale.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=3)
+        
+        tk.Label(
+            soglia_inner,
+            text="(filtra rumori sotto soglia)",
+            font=("Arial", 7),
+            fg="gray"
+        ).pack(side=tk.LEFT, padx=3)
+        
+        # Frame controlli compatto
+        control_frame = tk.Frame(self.root)
+        control_frame.pack(fill=tk.X, padx=8, pady=2)
+        
+        self.btn_avvia = tk.Button(
+            control_frame,
+            text="▶️ AVVIA",
+            command=self.avvia_applausometro,
+            font=("Arial", 10, "bold"),
+            bg="#27ae60",
+            fg="white",
+            height=1,
+            cursor="hand2"
+        )
+        self.btn_avvia.pack(side=tk.LEFT, expand=True, fill=tk.X, padx=(0, 2))
+        
+        self.btn_stop = tk.Button(
+            control_frame,
+            text="⏹️ STOP",
+            command=self.ferma_applausometro,
+            font=("Arial", 10, "bold"),
+            bg="#e74c3c",
+            fg="white",
+            height=1,
+            state=tk.DISABLED,
+            cursor="hand2"
+        )
+        self.btn_stop.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        
+        # Frame tabella concorrenti
+        table_frame = tk.LabelFrame(
+            self.root,
+            text="📊 Concorrenti",
+            font=("Arial", 8, "bold"),
+            padx=5,
+            pady=3
+        )
+        table_frame.pack(fill=tk.BOTH, expand=True, padx=8, pady=2)
+        
+        columns = ("pos", "nome", "punteggio")
+        self.tree = ttk.Treeview(
+            table_frame,
+            columns=columns,
+            show="headings",
+            height=5,
+            selectmode="browse"
+        )
+        
+        self.tree.heading("pos", text="#")
+        self.tree.heading("nome", text="Nome Concorrente")
+        self.tree.heading("punteggio", text="Punteggio")
+        
+        self.tree.column("pos", width=30, minwidth=25, stretch=False)
+        self.tree.column("nome", width=300, minwidth=100, stretch=True)
+        self.tree.column("punteggio", width=80, minwidth=60, stretch=False)
+        
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=scrollbar.set)
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        self.tree.bind("<Double-1>", self.on_double_click)
+        self.tree.bind("<ButtonRelease-1>", self.on_column_resize)
+        
+        # Bottoni gestione
+        btn_frame = tk.Frame(table_frame)
+        btn_frame.pack(fill=tk.X, pady=(3, 0))
+        
+        tk.Button(
+            btn_frame,
+            text="✏️ Modifica",
+            command=self.modifica_selezionato,
+            font=("Arial", 8),
+            bg="#3498db",
+            fg="white"
+        ).pack(side=tk.LEFT, padx=1, expand=True, fill=tk.X)
+        
+        tk.Button(
+            btn_frame,
+            text="➕ Aggiungi",
+            command=self.aggiungi_manuale,
+            font=("Arial", 8),
+            bg="#16a085",
+            fg="white"
+        ).pack(side=tk.LEFT, padx=1, expand=True, fill=tk.X)
+        
+        tk.Button(
+            btn_frame,
+            text="❌ Elimina",
+            command=self.elimina_selezionato,
+            font=("Arial", 8),
+            bg="#e67e22",
+            fg="white"
+        ).pack(side=tk.LEFT, padx=1, expand=True, fill=tk.X)
+        
+        btn_frame2 = tk.Frame(table_frame)
+        btn_frame2.pack(fill=tk.X, pady=(2, 0))
+        
+        tk.Button(
+            btn_frame2,
+            text="🏆 CLASSIFICA",
+            command=self.mostra_classifica,
+            font=("Arial", 9, "bold"),
+            bg="#9b59b6",
+            fg="white"
+        ).pack(side=tk.LEFT, padx=1, expand=True, fill=tk.X)
+        
+        tk.Button(
+            btn_frame2,
+            text="🎤 APPLAUSOMETRO",
+            command=self.apri_finestra_applausometro,
+            font=("Arial", 9, "bold"),
+            bg="#2980b9",
+            fg="white"
+        ).pack(side=tk.LEFT, padx=1, expand=True, fill=tk.X)
+        
+        tk.Button(
+            btn_frame2,
+            text="🔄 AZZERA",
+            command=self.azzera_punteggi,
+            font=("Arial", 8),
+            bg="#c0392b",
+            fg="white"
+        ).pack(side=tk.LEFT, padx=1, expand=True, fill=tk.X)
+        
+        # Frame controllo classifica
+        class_frame = tk.LabelFrame(
+            self.root,
+            text="🎚️ Controllo Classifica",
+            font=("Arial", 8, "bold"),
+            padx=8,
+            pady=3
+        )
+        class_frame.pack(fill=tk.X, padx=8, pady=2)
+        
+        control_class = tk.Frame(class_frame)
+        control_class.pack(fill=tk.X)
+        
+        tk.Button(
+            control_class,
+            text="⬆️ SU",
+            command=self.classifica_su,
+            font=("Arial", 9, "bold"),
+            width=10
+        ).pack(side=tk.LEFT, padx=2)
+        
+        self.posizione_label = tk.Label(
+            control_class,
+            text="Posizione: 1-5",
+            font=("Arial", 9)
+        )
+        self.posizione_label.pack(side=tk.LEFT, expand=True)
+        
+        tk.Button(
+            control_class,
+            text="⬇️ GIÙ",
+            command=self.classifica_giu,
+            font=("Arial", 9, "bold"),
+            width=10
+        ).pack(side=tk.RIGHT, padx=2)
+    
+    def on_column_resize(self, event):
+        """Salva quando l'utente ridimensiona le colonne"""
+        if hasattr(self, '_column_timer'):
+            self.root.after_cancel(self._column_timer)
+        self._column_timer = self.root.after(500, self.salva_configurazione)
+    
+    def aggiorna_sensibilita(self, val):
+        """Aggiorna il label della sensibilità"""
+        self.sens_label.config(text=f"{float(val):.0f}x")
+    
+    def aggiorna_soglia(self, val):
+        """Aggiorna il label della soglia"""
+        self.soglia_label.config(text=f"{float(val):.1f}%")
+        
+    def carica_microfoni(self):
+        """Carica la lista dei microfoni disponibili"""
+        try:
+            devices = sd.query_devices()
+            microfoni = []
+            self.device_indices = []
+            
+            for i, device in enumerate(devices):
+                if device['max_input_channels'] > 0:
+                    microfoni.append(f"{i}: {device['name']}")
+                    self.device_indices.append(i)
+            
+            self.mic_combo['values'] = microfoni
+            if microfoni:
+                self.mic_combo.current(0)
+            
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore nel caricare i microfoni: {e}")
+    
+    def apri_finestra_applausometro(self):
+        """Apre la finestra dell'applausometro"""
+        if self.applausometro_window is None or not self.applausometro_window.window.winfo_exists():
+            self.applausometro_window = FinestraApplausometro()
+        else:
+            # Se la finestra esiste già, portala in primo piano
+            self.applausometro_window.window.lift()
+            self.applausometro_window.window.focus_force()
+    
+    def avvia_applausometro(self):
+        """Avvia la sessione dell'applausometro"""
+        if not self.mic_combo.get():
+            messagebox.showerror("Errore", "Seleziona un microfono!")
+            return
+        
+        # CHIEDI NOME CONCORRENTE
+        nome_concorrente = simpledialog.askstring(
+            "Nome Concorrente",
+            "Inserisci il nome del concorrente:",
+            parent=self.root
+        )
+        
+        if not nome_concorrente or nome_concorrente.strip() == "":
+            messagebox.showwarning("Attenzione", "Devi inserire un nome per continuare!")
+            return
+        
+        nome_concorrente = nome_concorrente.strip()
+        
+        if self.applausometro_window is None or not self.applausometro_window.window.winfo_exists():
+            self.apri_finestra_applausometro()
+        
+        self.is_running = True
+        self.btn_avvia.config(state=tk.DISABLED)
+        self.btn_stop.config(state=tk.NORMAL)
+        
+        thread = threading.Thread(target=self.run_applausometro, args=(nome_concorrente,), daemon=True)
+        thread.start()
+    
+    def ferma_applausometro(self):
+        """Ferma manualmente l'applausometro"""
+        self.is_running = False
+        self.btn_avvia.config(state=tk.NORMAL)
+        self.btn_stop.config(state=tk.DISABLED)
+    
+    def run_applausometro(self, nome_concorrente):
+        """Esegue la sequenza dell'applausometro"""
+        try:
+            # Countdown rapido 3, 2, 1
+            for i in [3, 2, 1]:
+                if not self.is_running:
+                    return
+                self.applausometro_window.mostra_countdown_iniziale(i)
+                time.sleep(0.7)
+            
+            # Mostra "APPLAUDIRE!" con nome concorrente
+            self.applausometro_window.mostra_applaudire(nome_concorrente)
+            time.sleep(0.3)
+            
+            current_index = self.mic_combo.current()
+            device_index = self.device_indices[current_index]
+            
+            SAMPLE_RATE = 44100
+            DURATION = 7
+            
+            picchi = []
+            self.is_recording = True
+            start_time = time.time()
+            
+            sensibilita = self.sensibilita.get()
+            soglia_min = self.soglia_rumore.get()
+            
+            ultimo_aggiornamento = 0
+            picco_massimo = 0
+            
+            print(f"INIZIO REGISTRAZIONE - {nome_concorrente} - Sensibilità: {sensibilita}x, Soglia: {soglia_min}%")
+            
+            def audio_callback(indata, frames, time_info, status):
+                nonlocal ultimo_aggiornamento, picco_massimo
+                
+                if not self.is_recording:
+                    return
+                
+                try:
+                    audio_data = indata[:, 0]
+                    
+                    rms = np.sqrt(np.mean(audio_data**2))
+                    peak = np.max(np.abs(audio_data))
+                    energia_totale = (rms * 0.7 + peak * 0.3)
+                    volume = min(100, energia_totale * sensibilita * 10)
+                    
+                    if len(picchi) % 20 == 0:
+                        print(f"RMS: {rms:.6f}, Peak: {peak:.6f}, Volume: {volume:.2f}")
+                    
+                    if volume < soglia_min:
+                        volume = 0
+                    
+                    if volume > picco_massimo:
+                        picco_massimo = volume
+                    
+                    picchi.append(volume)
+                    
+                    current_time = time.time()
+                    if current_time - ultimo_aggiornamento >= 0.05:
+                        elapsed = current_time - start_time
+                        remaining = max(0, DURATION - elapsed)
+                        
+                        try:
+                            self.applausometro_window.aggiorna_volume(
+                                volume, 
+                                picco_massimo, 
+                                remaining, 
+                                nome_concorrente
+                            )
+                            ultimo_aggiornamento = current_time
+                        except:
+                            pass
+                except Exception as e:
+                    print(f"Errore callback: {e}")
+            
+            with sd.InputStream(
+                device=device_index,
+                channels=1,
+                samplerate=SAMPLE_RATE,
+                callback=audio_callback,
+                blocksize=2048
+            ):
+                time.sleep(DURATION)
+            
+            self.is_recording = False
+            
+            print(f"FINE REGISTRAZIONE - Campioni raccolti: {len(picchi)}")
+            
+            if picchi:
+                picchi_ordinati = sorted(picchi, reverse=True)
+                print(f"Top 10 picchi: {picchi_ordinati[:10]}")
+                
+                top_10_percent = max(1, len(picchi_ordinati) // 10)
+                top_picchi = picchi_ordinati[:top_10_percent]
+                punteggio_finale = np.mean(top_picchi)
+                
+                print(f"Punteggio finale: {punteggio_finale:.2f}")
+            else:
+                punteggio_finale = 0
+                print("NESSUN CAMPIONE REGISTRATO!")
+            
+            self.applausometro_window.mostra_stop()
+            time.sleep(1.0)
+            
+            self.applausometro_window.mostra_risultato(punteggio_finale, nome_concorrente)
+            
+            self.salva_log(float(punteggio_finale), nome_concorrente)
+            
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore durante l'esecuzione: {e}")
+            print(f"ERRORE COMPLETO: {e}")
+        finally:
+            self.ferma_applausometro()
+    
+    def aggiusta_punteggi_duplicati(self):
+        """Aggiusta i punteggi duplicati arrotondando per eccesso o difetto"""
+        logs = self.carica_logs()
+        
+        if len(logs) <= 1:
+            return
+        
+        # Ordina dal punteggio più alto al più basso
+        logs_ordinati = sorted(enumerate(logs), key=lambda x: x[1]['punteggio'], reverse=True)
+        
+        punteggi_usati = set()
+        
+        for idx, (original_idx, entry) in enumerate(logs_ordinati):
+            punteggio = round(entry['punteggio'], 2)
+            
+            # Il primo posto ha massimo 100
+            if idx == 0 and punteggio > 100:
+                punteggio = 100.0
+            
+            # Se il punteggio è già usato, aggiustalo
+            if punteggio in punteggi_usati:
+                punteggio_floor = math.floor(entry['punteggio'])
+                punteggio_ceil = math.ceil(entry['punteggio'])
+                
+                # Prova arrotondamento per difetto
+                if punteggio_floor not in punteggi_usati and punteggio_floor >= 0:
+                    punteggio = float(punteggio_floor)
+                # Prova arrotondamento per eccesso
+                elif punteggio_ceil not in punteggi_usati and punteggio_ceil <= 100:
+                    punteggio = float(punteggio_ceil)
+                else:
+                    # Se entrambi sono usati, decrementa di 0.01 fino a trovare un valore libero
+                    punteggio = round(entry['punteggio'], 2)
+                    while punteggio in punteggi_usati and punteggio > 0:
+                        punteggio = round(punteggio - 0.01, 2)
+                    
+                    # Se ancora duplicato, incrementa
+                    if punteggio in punteggi_usati or punteggio < 0:
+                        punteggio = round(entry['punteggio'], 2)
+                        while punteggio in punteggi_usati and punteggio <= 100:
+                            punteggio = round(punteggio + 0.01, 2)
+                
+                print(f"Punteggio duplicato trovato: {entry['punteggio']:.2f} -> {punteggio:.2f} per {entry['concorrente']}")
+            
+            # Limita comunque tra 0 e 100
+            punteggio = max(0.0, min(100.0, punteggio))
+            
+            punteggi_usati.add(punteggio)
+            logs[original_idx]['punteggio'] = punteggio
+        
+        self.salva_logs(logs)
+    
+    def salva_log(self, punteggio, nome_concorrente):
+        logs = self.carica_logs()
+        
+        log_entry = {
+            "concorrente": nome_concorrente,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "punteggio": round(float(punteggio), 2)
+        }
+        
+        logs.append(log_entry)
+        self.salva_logs(logs)
+        self.aggiusta_punteggi_duplicati()
+        self.carica_log()
+        self.aggiorna_classifica_se_aperta()
+    
+    def carica_logs(self):
+        if os.path.exists(self.log_file):
+            try:
+                with open(self.log_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except:
+                return []
+        return []
+    
+    def salva_logs(self, logs):
+        with open(self.log_file, 'w', encoding='utf-8') as f:
+            json.dump(logs, f, indent=2, ensure_ascii=False)
+    
+    def carica_log(self):
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        logs = self.carica_logs()
+        
+        for i, entry in enumerate(logs, 1):
+            nome = entry.get('concorrente', f'Concorrente {i}')
+            punteggio = entry.get('punteggio', 0)
+            
+            self.tree.insert("", "end", values=(i, nome, f"{punteggio:.2f}"))
+    
+    def on_double_click(self, event):
+        self.modifica_selezionato()
+    
+    def modifica_selezionato(self):
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Attenzione", "Seleziona un concorrente da modificare!")
+            return
+        
+        item = self.tree.item(selection[0])
+        values = item['values']
+        index = int(values[0]) - 1
+        
+        logs = self.carica_logs()
+        
+        nuovo_nome = simpledialog.askstring(
+            "Modifica Nome",
+            "Nuovo nome:",
+            initialvalue=logs[index]['concorrente']
+        )
+        
+        if nuovo_nome:
+            logs[index]['concorrente'] = nuovo_nome
+            
+            nuovo_punteggio = simpledialog.askfloat(
+                "Modifica Punteggio",
+                "Nuovo punteggio (0-100):",
+                initialvalue=logs[index]['punteggio'],
+                minvalue=0,
+                maxvalue=100
+            )
+            
+            if nuovo_punteggio is not None:
+                logs[index]['punteggio'] = round(nuovo_punteggio, 2)
+            
+            self.salva_logs(logs)
+            self.aggiusta_punteggi_duplicati()
+            self.carica_log()
+            self.aggiorna_classifica_se_aperta()
+    
+    def aggiungi_manuale(self):
+        nome = simpledialog.askstring("Aggiungi Concorrente", "Nome:")
+        if not nome:
+            return
+        
+        punteggio = simpledialog.askfloat(
+            "Aggiungi Concorrente",
+            "Punteggio (0-100):",
+            minvalue=0,
+            maxvalue=100
+        )
+        
+        if punteggio is not None:
+            logs = self.carica_logs()
+            logs.append({
+                "concorrente": nome,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "punteggio": round(punteggio, 2)
+            })
+            self.salva_logs(logs)
+            self.aggiusta_punteggi_duplicati()
+            self.carica_log()
+            self.aggiorna_classifica_se_aperta()
+    
+    def elimina_selezionato(self):
+        selection = self.tree.selection()
+        if not selection:
+            messagebox.showwarning("Attenzione", "Seleziona un concorrente da eliminare!")
+            return
+        
+        item = self.tree.item(selection[0])
+        values = item['values']
+        index = int(values[0]) - 1
+        
+        if messagebox.askyesno("Conferma", f"Eliminare '{values[1]}'?"):
+            logs = self.carica_logs()
+            logs.pop(index)
+            self.salva_logs(logs)
+            self.aggiusta_punteggi_duplicati()
+            self.carica_log()
+            self.aggiorna_classifica_se_aperta()
+    
+    def azzera_punteggi(self):
+        if messagebox.askyesno("⚠️ ATTENZIONE", "Vuoi AZZERARE tutti i punteggi?\n\nQuesta azione è IRREVERSIBILE!"):
+            if os.path.exists(self.log_file):
+                os.remove(self.log_file)
+            self.carica_log()
+            if self.classifica_window is not None:
+                try:
+                    self.classifica_window.destroy()
+                    self.classifica_window = None
+                except:
+                    self.classifica_window = None
+            messagebox.showinfo("Successo", "Tutti i punteggi sono stati azzerati!")
+    
+    def mostra_classifica(self):
+        logs = self.carica_logs()
+        
+        if not logs:
+            messagebox.showwarning("Attenzione", "Nessun concorrente da mostrare!")
+            return
+        
+        logs_ordinati = sorted(logs, key=lambda x: x['punteggio'], reverse=False)
+        
+        if self.classifica_window is not None:
+            try:
+                self.classifica_window.destroy()
+            except:
+                pass
+        
+        self.classifica_window = FinestraClassifica(logs_ordinati, self)
+        self.posizione_classifica.set(0)
+        self.aggiorna_posizione_classifica()
+    
+    def classifica_su(self):
+        try:
+            if self.classifica_window and self.classifica_window.winfo_exists():
+                logs = self.carica_logs()
+                logs_ordinati = sorted(logs, key=lambda x: x['punteggio'], reverse=False)
+                
+                new_pos = max(0, self.posizione_classifica.get() - 1)
+                self.posizione_classifica.set(new_pos)
+                
+                self.classifica_window.aggiorna_visualizzazione(logs_ordinati, new_pos)
+                self.aggiorna_posizione_classifica()
+        except:
+            pass
+    
+    def classifica_giu(self):
+        try:
+            if self.classifica_window and self.classifica_window.winfo_exists():
+                logs = self.carica_logs()
+                logs_ordinati = sorted(logs, key=lambda x: x['punteggio'], reverse=False)
+                
+                max_pos = max(0, len(logs_ordinati) - 5)
+                new_pos = min(max_pos, self.posizione_classifica.get() + 1)
+                self.posizione_classifica.set(new_pos)
+                
+                self.classifica_window.aggiorna_visualizzazione(logs_ordinati, new_pos)
+                self.aggiorna_posizione_classifica()
+        except:
+            pass
+    
+    def aggiorna_posizione_classifica(self):
+        logs = self.carica_logs()
+        if logs:
+            pos = self.posizione_classifica.get()
+            inizio = pos + 1
+            fine = min(pos + 5, len(logs))
+            self.posizione_label.config(text=f"Mostra: {inizio}-{fine} di {len(logs)}")
+        else:
+            self.posizione_label.config(text="Nessun concorrente")
+    
+    def aggiorna_classifica_se_aperta(self):
+        try:
+            if self.classifica_window and self.classifica_window.winfo_exists():
+                logs = self.carica_logs()
+                logs_ordinati = sorted(logs, key=lambda x: x['punteggio'], reverse=False)
+                pos = self.posizione_classifica.get()
+                self.classifica_window.aggiorna_visualizzazione(logs_ordinati, pos)
+                self.aggiorna_posizione_classifica()
+        except:
+            pass
+    
+    def on_closing(self):
+        self.is_running = False
+        self.salva_configurazione()
+        
+        if self.applausometro_window and self.applausometro_window.window.winfo_exists():
+            self.applausometro_window.window.destroy()
+        
+        if self.classifica_window is not None:
+            try:
+                self.classifica_window.destroy()
+            except:
+                pass
+        
+        self.root.destroy()
+class ControlPanel:
+    def __init__(self, root, url):
+        self.root = root
+        self.root.title("Messaggistica automatica - www.ivanlivemusic.com")
+        self.settings = load_settings()
+        geom = self.settings.get('window_geometry', '920x1000')
+        self.root.geometry(geom)
+        self.root.configure(bg='#e8e8e8')
+        self.url = url
+        self.qr_windows = []
+        self.display_windows = []
+        self.quiz_windows = []
+        self.quiz_view_windows = []
+        self.message_duration = self.settings.get('message_duration', 5)
+        self.base_message = self.settings.get('base_message', 'Scansiona il QR-CODE per mandare il tuo messaggio')
+        self.pin = self.settings.get('pin', '0000')
+        self.quiz_font_size = self.settings.get('quiz_font_size', QUIZ_FONT_SIZE)
+        self.current_quiz_id = 0
+        global CURRENT_PIN
+        CURRENT_PIN = self.pin
+        self._save_timer = None
+        self.root.bind('<Configure>', self._on_configure)
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+        
+        header = tk.Frame(root, bg='#4d5d6d', height=100)
+        header.pack(fill=tk.X, padx=0, pady=0)
+        header.pack_propagate(False)
+        tk.Label(header, text="Messaggistica automatica", font=('Segoe UI', 22, 'bold'), bg='#4d5d6d', fg='white').pack(pady=(15, 2))
+        tk.Label(header, text="powered by www.ivanlivemusic.com", font=('Segoe UI', 9), bg='#4d5d6d', fg='#a0b0c0').pack()
+        
+        status_frame = tk.Frame(root, bg='#e8e8e8')
+        status_frame.pack(fill=tk.X, padx=12, pady=(8, 0))
+        self.status = tk.Label(status_frame, text="● Online (0)", bg='#e8e8e8', fg='#5cb85c', font=('Segoe UI', 9, 'bold'))
+        self.status.pack(side=tk.RIGHT)
+        
+        btn_frame = tk.Frame(root, bg='#e8e8e8')
+        btn_frame.pack(fill=tk.X, padx=12, pady=12)
+        btn_container = tk.Frame(btn_frame, bg='#e8e8e8')
+        btn_container.pack(expand=True)
+        tk.Button(btn_container, text="☰ Display", command=self.open_display, bg='#9370db', fg='white', 
+                 font=('Segoe UI', 9, 'bold'), padx=18, pady=10, relief=tk.FLAT, cursor='hand2', width=12).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_container, text="▭ QR Code", command=self.open_qr, bg='#f0ad4e', fg='white', 
+                 font=('Segoe UI', 9, 'bold'), padx=18, pady=10, relief=tk.FLAT, cursor='hand2', width=12).pack(side=tk.LEFT, padx=4)
+        tk.Button(btn_container, text="♦ Messaggio Base", command=self.force_base_message, bg='#5bc0de', fg='white', 
+                 font=('Segoe UI', 9, 'bold'), padx=18, pady=10, relief=tk.FLAT, cursor='hand2', width=15).pack(side=tk.LEFT, padx=4)
+        
+        # BOTTONE APPLAUSOMETRO
+        tk.Button(btn_container, text="🎤 Applausometro", command=self.open_applausometro, bg='#e67e22', fg='white', 
+                 font=('Segoe UI', 9, 'bold'), padx=18, pady=10, relief=tk.FLAT, cursor='hand2', width=13).pack(side=tk.LEFT, padx=4)
+        
+        tk.Button(btn_container, text="🗑 Elimina Dati", command=self.delete_all_data, bg='#dc3545', fg='white', 
+                 font=('Segoe UI', 9, 'bold'), padx=18, pady=10, relief=tk.FLAT, cursor='hand2', width=13).pack(side=tk.LEFT, padx=4)
+        
+        controls_container = tk.Frame(root, bg='#e8e8e8')
+        controls_container.pack(fill=tk.X, padx=12, pady=8)
+        
+        font_frame = tk.LabelFrame(controls_container, text="Dimensione Font Display", bg='#ffffff', fg='#333', 
+                                   font=('Segoe UI', 8), padx=10, pady=8, relief=tk.SOLID, bd=1)
+        font_frame.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+        self.font_var = tk.IntVar(value=self.settings.get('font_size', DISPLAY_FONT_SIZE))
+        tk.Scale(font_frame, from_=16, to=60, orient=tk.HORIZONTAL, variable=self.font_var, 
+                command=self.update_font, bg='#ffffff', fg='#333', troughcolor='#d0d0d0', 
+                showvalue=0, length=140, width=14).pack()
+        self.font_value_label = tk.Label(font_frame, text=str(self.font_var.get()), bg='#ffffff', fg='#333', 
+                                         font=('Segoe UI', 9, 'bold'))
+        self.font_value_label.pack()
+        
+        qr_frame = tk.LabelFrame(controls_container, text="Dimensione QR Code", bg='#ffffff', fg='#333', 
+                                 font=('Segoe UI', 8), padx=10, pady=8, relief=tk.SOLID, bd=1)
+        qr_frame.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+        self.qr_var = tk.IntVar(value=self.settings.get('qr_size', QR_CODE_SIZE))
+        tk.Scale(qr_frame, from_=200, to=800, orient=tk.HORIZONTAL, variable=self.qr_var, 
+                command=self.update_qr, bg='#ffffff', fg='#333', troughcolor='#d0d0d0',
+                showvalue=0, length=140, width=14).pack()
+        self.qr_value_label = tk.Label(qr_frame, text=str(self.qr_var.get()), bg='#ffffff', fg='#333', 
+                                       font=('Segoe UI', 9, 'bold'))
+        self.qr_value_label.pack()
+        
+        timer_frame = tk.LabelFrame(controls_container, text="⏱ Durata Visualizzazione", bg='#ffffff', fg='#333', 
+                                    font=('Segoe UI', 8), padx=10, pady=8, relief=tk.SOLID, bd=1)
+        timer_frame.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+        self.timer_var = tk.IntVar(value=self.message_duration)
+        tk.Scale(timer_frame, from_=3, to=30, orient=tk.HORIZONTAL, variable=self.timer_var, 
+                command=self.update_timer, bg='#ffffff', fg='#333', troughcolor='#d0d0d0',
+                showvalue=0, length=140, width=14).pack()
+        self.timer_value_label = tk.Label(timer_frame, text=f"{self.timer_var.get()}s", bg='#ffffff', fg='#333', 
+                                          font=('Segoe UI', 9, 'bold'))
+        self.timer_value_label.pack()
+        
+        pin_frame = tk.LabelFrame(controls_container, text="🔑 PIN (4 cifre)", bg='#ffffff', fg='#333', 
+                                  font=('Segoe UI', 8), padx=10, pady=8, relief=tk.SOLID, bd=1)
+        pin_frame.pack(side=tk.LEFT, padx=4, fill=tk.X, expand=True)
+        pin_content = tk.Frame(pin_frame, bg='#ffffff')
+        pin_content.pack(fill=tk.BOTH, expand=True)
+        self.pin_entry = tk.Entry(pin_content, font=('Courier New', 14, 'bold'), bg='#ffffff', 
+                                  fg='#333', relief=tk.SOLID, bd=1, width=8, justify='center')
+        self.pin_entry.insert(0, self.pin)
+        self.pin_entry.pack(pady=(5, 5))
+        tk.Button(pin_content, text="✓ Applica", command=self.update_pin, 
+                 bg='#5cb85c', fg='white', font=('Segoe UI', 7, 'bold'), 
+                 padx=10, pady=3, relief=tk.FLAT, cursor='hand2').pack()
+        
+        base_frame = tk.LabelFrame(root, text="Messaggio Base Display", bg='#ffffff', fg='#333', 
+                                   font=('Segoe UI', 9, 'bold'), padx=10, pady=10, relief=tk.SOLID, bd=1)
+        base_frame.pack(fill=tk.X, padx=12, pady=8)
+        msg_input_frame = tk.Frame(base_frame, bg='#ffffff')
+        msg_input_frame.pack(fill=tk.X, padx=5, pady=5)
+        self.base_message_entry = tk.Entry(msg_input_frame, font=('Segoe UI', 10), bg='#ffffff', 
+                                           fg='#333', relief=tk.SOLID, bd=1)
+        self.base_message_entry.insert(0, self.base_message)
+        self.base_message_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+        tk.Button(msg_input_frame, text="✓ Applica", command=self.update_base_message, 
+                 bg='#5cb85c', fg='white', font=('Segoe UI', 8, 'bold'), 
+                 padx=16, pady=6, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT)
+        
+        quiz_frame = tk.LabelFrame(root, text="🎯 Gestione Quiz", bg='#ffffff', fg='#333', 
+                                   font=('Segoe UI', 9, 'bold'), padx=10, pady=10, relief=tk.SOLID, bd=1)
+        quiz_frame.pack(fill=tk.X, padx=12, pady=8)
+        
+        quiz_buttons_frame = tk.Frame(quiz_frame, bg='#ffffff')
+        quiz_buttons_frame.pack(fill=tk.X)
+        
+        tk.Button(quiz_buttons_frame, text="▶ Avvia Nuovo Quiz", command=self.start_quiz, 
+                 bg='#fa8c16', fg='white', font=('Segoe UI', 9, 'bold'), 
+                 padx=20, pady=10, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=5)
+        tk.Button(quiz_buttons_frame, text="🚀 Avvia Domanda", command=self.start_quiz_display, 
+                 bg='#52c41a', fg='white', font=('Segoe UI', 9, 'bold'), 
+                 padx=20, pady=10, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=5)
+        tk.Button(quiz_buttons_frame, text="📥 Importa da DB", command=self.import_quiz_from_db, 
+                 bg='#1890ff', fg='white', font=('Segoe UI', 9, 'bold'), 
+                 padx=20, pady=10, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=5)
+        
+        quiz_font_frame = tk.Frame(quiz_frame, bg='#ffffff')
+        quiz_font_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        tk.Label(quiz_font_frame, text="Font Domanda Quiz:", font=('Segoe UI', 9, 'bold'), 
+                bg='#ffffff', fg='#333').pack(side=tk.LEFT, padx=(5, 10))
+        
+        self.quiz_font_var = tk.IntVar(value=self.quiz_font_size)
+        tk.Scale(quiz_font_frame, from_=20, to=60, orient=tk.HORIZONTAL, variable=self.quiz_font_var, 
+                command=self.update_quiz_font, bg='#ffffff', fg='#333', troughcolor='#d0d0d0',
+                showvalue=0, length=200, width=14).pack(side=tk.LEFT)
+        
+        self.quiz_font_value_label = tk.Label(quiz_font_frame, text=str(self.quiz_font_size), 
+                                              bg='#ffffff', fg='#333', font=('Segoe UI', 9, 'bold'))
+        self.quiz_font_value_label.pack(side=tk.LEFT, padx=(10, 5))
+        
+        msg_frame = tk.LabelFrame(root, text="Messaggi in Attesa", bg='#ffffff', fg='#333', 
+                                  font=('Segoe UI', 9, 'bold'), padx=10, pady=10, relief=tk.SOLID, bd=1, height=120)
+        msg_frame.pack(fill=tk.X, padx=12, pady=(0, 8))
+        msg_frame.pack_propagate(False)
+        canvas = tk.Canvas(msg_frame, bg='#ffffff', highlightthickness=0)
+        scrollbar = ttk.Scrollbar(msg_frame, orient="vertical", command=canvas.yview)
+        self.scrollable = tk.Frame(canvas, bg='#ffffff')
+        self.scrollable.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+        canvas.create_window((0, 0), window=self.scrollable, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        karaoke_frame = tk.LabelFrame(root, text="🎤 PRENOTAZIONI KARAOKE WEB", bg='#ffffff', fg='#333', 
+                                      font=('Segoe UI', 9, 'bold'), padx=10, pady=10, relief=tk.SOLID, bd=1, height=200)
+        karaoke_frame.pack(fill=tk.BOTH, expand=True, padx=12, pady=(0, 12))
+        karaoke_frame.pack_propagate(True)
+        
+        canvas_karaoke = tk.Canvas(karaoke_frame, bg='#ffffff', highlightthickness=0, height=180)
+        scrollbar_karaoke = ttk.Scrollbar(karaoke_frame, orient="vertical", command=canvas_karaoke.yview)
+        self.scrollable_karaoke = tk.Frame(canvas_karaoke, bg='#ffffff')
+        self.scrollable_karaoke.bind("<Configure>", lambda e: canvas_karaoke.configure(scrollregion=canvas_karaoke.bbox("all")))
+        canvas_karaoke.create_window((0, 0), window=self.scrollable_karaoke, anchor="nw", width=850)
+        canvas_karaoke.configure(yscrollcommand=scrollbar_karaoke.set)
+        canvas_karaoke.pack(side="left", fill="both", expand=True)
+        scrollbar_karaoke.pack(side="right", fill="y")
+        
+        self.load_pending()
+        self.load_karaoke()
+        self.start_auto_refresh()
+        threading.Thread(target=self._monitor_ngrok_bg, daemon=True).start()
+    
+    def open_applausometro(self):
+        """Apre la finestra di controllo dell'applausometro"""
+        FinestraControlloApplausometro(self.root)
+    
+    def start_quiz(self):
+        def on_quiz_created(domanda, opzioni, risposta_corretta, durata):
+            global QUIZ_ACTIVE, CURRENT_QUIZ, QUIZ_START_TIME, QUIZ_DURATION
+            
+            if self.current_quiz_id > 0:
+                db.clear_quiz_risposte(self.current_quiz_id)
+            
+            self.current_quiz_id += 1
+            CURRENT_QUIZ = {
+                'id': self.current_quiz_id,
+                'domanda': domanda,
+                'opzioni': opzioni,
+                'risposta_corretta': risposta_corretta
+            }
+            QUIZ_DURATION = durata
+            QUIZ_START_TIME = 0
+            QUIZ_ACTIVE = False
+            
+            view_win = tk.Toplevel(self.root)
+            w = QuizViewWindow(view_win, self)
+            self.quiz_view_windows.append(w)
+        
+        form_win = tk.Toplevel(self.root)
+        QuizFormWindow(form_win, on_quiz_created)
+    
+    def import_quiz_from_db(self):
+        try:
+            if not os.path.exists('domande_quiz.txt'):
+                messagebox.showerror("Errore", "File 'domande_quiz.txt' non trovato!\n\nCrea il file nella stessa cartella del programma.")
+                return
+            
+            with open('domande_quiz.txt', 'r', encoding='utf-8') as f:
+                contenuto = f.read().strip()
+            
+            if not contenuto:
+                messagebox.showerror("Errore", "Il file 'domande_quiz.txt' è vuoto!")
+                return
+            
+            blocchi = [b.strip() for b in contenuto.split('\n\n') if b.strip()]
+            
+            if not blocchi:
+                messagebox.showerror("Errore", "Nessuna domanda trovata nel file!")
+                return
+            
+            blocco = random.choice(blocchi)
+            linee = blocco.split('\n')
+            dati = {}
+            
+            for linea in linee:
+                if ':' in linea:
+                    chiave, valore = linea.split(':', 1)
+                    dati[chiave.strip()] = valore.strip()
+            
+            if 'DOMANDA' not in dati:
+                messagebox.showerror("Errore", "Domanda mancante nel blocco selezionato!")
+                return
+            
+            opzioni = []
+            for i in range(1, 5):
+                opt_key = f'OPZIONE{i}'
+                if opt_key not in dati:
+                    messagebox.showerror("Errore", f"Opzione {i} mancante!")
+                    return
+                opzioni.append(dati[opt_key])
+            
+            if 'RISPOSTA' not in dati:
+                messagebox.showerror("Errore", "Risposta corretta mancante!")
+                return
+            
+            try:
+                risposta_corretta = int(dati['RISPOSTA'])
+                if risposta_corretta < 1 or risposta_corretta > 4:
+                    raise ValueError()
+            except:
+                messagebox.showerror("Errore", "Risposta corretta deve essere un numero da 1 a 4!")
+                return
+            
+            durata = 30
+            if 'DURATA' in dati:
+                try:
+                    durata = int(dati['DURATA'])
+                    if durata < 10 or durata > 120:
+                        durata = 30
+                except:
+                    durata = 30
+            
+            global QUIZ_ACTIVE, CURRENT_QUIZ, QUIZ_START_TIME, QUIZ_DURATION
+            
+            if self.current_quiz_id > 0:
+                db.clear_quiz_risposte(self.current_quiz_id)
+            
+            self.current_quiz_id += 1
+            CURRENT_QUIZ = {
+                'id': self.current_quiz_id,
+                'domanda': dati['DOMANDA'],
+                'opzioni': opzioni,
+                'risposta_corretta': risposta_corretta
+            }
+            QUIZ_DURATION = durata
+            QUIZ_START_TIME = 0
+            QUIZ_ACTIVE = False
+            
+            view_win = tk.Toplevel(self.root)
+            w = QuizViewWindow(view_win, self)
+            self.quiz_view_windows.append(w)
+            
+            messagebox.showinfo("Quiz Importato", f"✅ Quiz caricato con successo!\n\nDomanda: {dati['DOMANDA'][:50]}...")
+            
+        except Exception as e:
+            messagebox.showerror("Errore", f"Errore durante l'importazione:\n{str(e)}")
+    
+    def start_quiz_display(self):
+        global QUIZ_ACTIVE, QUIZ_START_TIME, CURRENT_QUIZ
+        if not CURRENT_QUIZ:
+            messagebox.showerror("Errore", "Nessun quiz creato! Crea prima un quiz con 'Avvia Nuovo Quiz' o 'Importa da DB'.")
+            return
+        
+        if QUIZ_ACTIVE:
+            messagebox.showwarning("Attenzione", "Il quiz è già in corso!")
+            return
+        
+        db.clear_quiz_risposte(self.current_quiz_id)
+        
+        QUIZ_START_TIME = time.time()
+        QUIZ_ACTIVE = True
+        
+        for w in self.quiz_view_windows:
+            if w.root.winfo_exists():
+                w.start_display()
+        
+        for w in self.quiz_windows:
+            if w.root.winfo_exists():
+                w.show_quiz(CURRENT_QUIZ, QUIZ_DURATION)
+        
+        def countdown():
+            global QUIZ_ACTIVE
+            tempo_trascorso = time.time() - QUIZ_START_TIME
+            tempo_rimanente = QUIZ_DURATION - tempo_trascorso
+            if tempo_rimanente > 0 and QUIZ_ACTIVE:
+                for w in self.quiz_windows:
+                    if w.root.winfo_exists():
+                        w.update_timer(tempo_rimanente)
+                self.root.after(1000, countdown)
+            else:
+                QUIZ_ACTIVE = False
+                for w in self.quiz_windows:
+                    if w.root.winfo_exists():
+                        w.show_waiting()
+        countdown()
+    
+    def open_quiz_display(self):
+        quiz_win = tk.Toplevel()
+        w = QuizWindow(quiz_win)
+        self.quiz_windows.append(w)
+    
+    def update_quiz_font(self, value):
+        self.quiz_font_size = int(float(value))
+        self.quiz_font_value_label.config(text=str(self.quiz_font_size))
+        for w in self.quiz_view_windows:
+            if w.root.winfo_exists():
+                w.update_font_size(self.quiz_font_size)
+        self._save_settings()
+    
+    def _on_configure(self, event):
+        if self._save_timer:
+            try:
+                self.root.after_cancel(self._save_timer)
+            except:
+                pass
+        self._save_timer = self.root.after(600, self._save_settings)
+    
+    def _save_settings(self):
+        try:
+            self.settings['window_geometry'] = self.root.geometry()
+            self.settings['font_size'] = self.font_var.get()
+            self.settings['qr_size'] = self.qr_var.get()
+            self.settings['message_duration'] = self.message_duration
+            self.settings['base_message'] = self.base_message
+            self.settings['pin'] = self.pin
+            self.settings['quiz_font_size'] = self.quiz_font_size
+            save_settings(self.settings)
+        except:
+            pass
+    
+    def _on_close(self):
+        self._save_settings()
+        self.root.destroy()
+    
+    def _monitor_ngrok_bg(self):
+        prev = None
+        while True:
+            time.sleep(1)
+            try:
+                url = NGROK_URL
+                if url and url != prev:
+                    prev = url
+                    self.url = url
+                    for w in list(self.qr_windows):
+                        try:
+                            w.update_url(url)
+                        except:
+                            pass
+            except:
+                pass
+    
+    def update_font(self, value):
+        global DISPLAY_FONT_SIZE
+        DISPLAY_FONT_SIZE = int(float(value))
+        self.font_value_label.config(text=str(DISPLAY_FONT_SIZE))
+        for w in self.display_windows:
+            if w.root.winfo_exists():
+                w.update_font_size(DISPLAY_FONT_SIZE)
+    
+    def update_qr(self, value):
+        global QR_CODE_SIZE
+        QR_CODE_SIZE = int(float(value))
+        self.qr_value_label.config(text=str(QR_CODE_SIZE))
+        for w in self.qr_windows:
+            if w.root.winfo_exists():
+                w.update_size(QR_CODE_SIZE)
+    
+    def update_timer(self, value):
+        self.message_duration = int(float(value))
+        self.timer_value_label.config(text=f"{self.message_duration}s")
+        for w in self.display_windows:
+            if w.root.winfo_exists():
+                w.update_message_duration(self.message_duration)
+    
+    def update_pin(self):
+        global CURRENT_PIN
+        new_pin = self.pin_entry.get().strip()
+        if len(new_pin) == 4 and new_pin.isdigit():
+            self.pin = new_pin
+            CURRENT_PIN = new_pin
+            self._save_settings()
+            for w in self.qr_windows:
+                if w.root.winfo_exists():
+                    w.update_pin(self.pin)
+            self.status.config(text=f"✓ PIN aggiornato: {self.pin}", fg='#5cb85c')
+            self.root.after(2000, lambda: self.status.config(text=f"● Online ({len(db.get_pending())})", fg='#5cb85c'))
+        else:
+            messagebox.showerror("Errore PIN", "Il PIN deve essere di esattamente 4 cifre numeriche!")
+            self.pin_entry.delete(0, tk.END)
+            self.pin_entry.insert(0, self.pin)
+    
+    def update_base_message(self):
+        new_message = self.base_message_entry.get().strip()
+        if new_message:
+            self.base_message = new_message
+            self._save_settings()
+            for w in self.display_windows:
+                if w.root.winfo_exists():
+                    w.update_base_message(self.base_message)
+    
+    def delete_all_data(self):
+        result = messagebox.askyesno("Conferma Eliminazione", 
+            "⚠️ ATTENZIONE!\n\nQuesto cancellerà TUTTI i dati:\n\n• Tutti i messaggi\n• Tutte le prenotazioni karaoke\n• Tutti i risultati quiz\n\nQuesta operazione è IRREVERSIBILE!\n\nSei sicuro?",
+            icon='warning')
+        if result:
+            try:
+                c = db.conn.cursor()
+                c.execute('DELETE FROM messaggi')
+                c.execute('DELETE FROM karaoke')
+                c.execute('DELETE FROM quiz_risposte')
+                db.conn.commit()
+                self.load_pending()
+                self.load_karaoke()
+                for w in self.display_windows:
+                    if w.root.winfo_exists():
+                        w.show_qr_prompt()
+                self.status.config(text="✓ Tutti i dati eliminati", fg='#ff6b6b')
+                self.root.after(3000, lambda: self.status.config(text=f"● Online ({len(db.get_pending())})", fg='#5cb85c'))
+                messagebox.showinfo("Completato", "✓ Tutti i dati eliminati!")
+            except Exception as e:
+                messagebox.showerror("Errore", f"Errore: {e}")
+    
+    def load_pending(self):
+        try:
+            msgs = db.get_pending()
+            for w in self.scrollable.winfo_children():
+                w.destroy()
+            if not msgs:
+                tk.Label(self.scrollable, text="✓ Nessun messaggio in attesa", bg='#ffffff', fg='#5cb85c', 
+                        font=('Segoe UI', 10)).pack(pady=15)
+            else:
+                for msg in msgs:
+                    self.create_card(msg)
+            self.status.config(text=f"● Online ({len(msgs)})", fg='#5cb85c')
+        except:
+            self.status.config(text="● Errore", fg='#d9534f')
+    
+    def create_card(self, msg):
+        msg_id, nome, orig, filt, ts, motivo = msg
+        card = tk.Frame(self.scrollable, bg='#f9f9f9', relief=tk.SOLID, borderwidth=1)
+        card.pack(fill=tk.X, padx=3, pady=2)
+        content_frame = tk.Frame(card, bg='#f9f9f9')
+        content_frame.pack(fill=tk.X, padx=8, pady=5)
+        tk.Label(content_frame, text=f"{nome}:", bg='#f9f9f9', fg='#333', 
+                font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, anchor='w')
+        tk.Label(content_frame, text=f" {orig}", bg='#f9f9f9', fg='#666', 
+                font=('Segoe UI', 9), wraplength=450, justify=tk.LEFT).pack(side=tk.LEFT, anchor='w', fill=tk.X, expand=True)
+        btn_frame = tk.Frame(card, bg='#f9f9f9')
+        btn_frame.pack(fill=tk.X, padx=8, pady=5)
+        tk.Button(btn_frame, text="✓ Approva", command=lambda m=msg_id: self.approve(m), 
+                 bg='#5cb85c', fg='white', font=('Segoe UI', 8, 'bold'), 
+                 padx=12, pady=3, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_frame, text="✗ Elimina", command=lambda m=msg_id: self.reject(m), 
+                 bg='#d9534f', fg='white', font=('Segoe UI', 8, 'bold'), 
+                 padx=12, pady=3, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=2)
+    
+    def load_karaoke(self):
+        try:
+            karaoke_list = db.get_karaoke_list()
+            for w in self.scrollable_karaoke.winfo_children():
+                w.destroy()
+            if not karaoke_list:
+                tk.Label(self.scrollable_karaoke, text="Nessuna prenotazione karaoke", bg='#ffffff', fg='#999', 
+                        font=('Segoe UI', 9)).pack(pady=15)
+            else:
+                for idx, (kid, nome, ts) in enumerate(karaoke_list, 1):
+                    self.create_karaoke_card(kid, idx, nome, ts)
+        except:
+            pass
+    
+    def create_karaoke_card(self, kid, position, nome, timestamp):
+        card = tk.Frame(self.scrollable_karaoke, bg='#ffffff', relief=tk.SOLID, borderwidth=1)
+        card.pack(fill=tk.X, padx=3, pady=2)
+        content_frame = tk.Frame(card, bg='#ffffff')
+        content_frame.pack(fill=tk.X, padx=10, pady=6)
+        
+        tk.Label(content_frame, text=f"#{position}", bg='#ffffff', fg='#888', 
+                font=('Segoe UI', 8, 'bold'), width=3).pack(side=tk.LEFT)
+        
+        nome_label = tk.Label(content_frame, text=nome, bg='#ffffff', fg='#333', 
+                font=('Segoe UI', 9, 'bold'), cursor='hand2')
+        nome_label.pack(side=tk.LEFT, padx=(8, 0))
+        nome_label.bind('<Button-1>', lambda e, n=nome: self.copy_to_clipboard(n))
+        
+        tk.Label(content_frame, text=f"🕒 {timestamp}", bg='#ffffff', fg='#888', 
+                font=('Segoe UI', 7)).pack(side=tk.LEFT, padx=(10, 0))
+        
+        tk.Button(content_frame, text="✗ Elimina", command=lambda k=kid: self.remove_karaoke(k), 
+                 bg='#dc3545', fg='white', font=('Segoe UI', 7, 'bold'), 
+                 padx=8, pady=2, relief=tk.FLAT, cursor='hand2').pack(side=tk.LEFT, padx=(10, 0))
+    
+    def copy_to_clipboard(self, text):
+        self.root.clipboard_clear()
+        self.root.clipboard_append(text)
+        self.root.update()
+        self.status.config(text=f"✓ Copiato: {text}", fg='#5cb85c')
+        self.root.after(2000, lambda: self.status.config(text=f"● Online ({len(db.get_pending())})", fg='#5cb85c'))
+    
+    def remove_karaoke(self, kid):
+        db.remove_karaoke(kid)
+        self.load_karaoke()
+    
+    def approve(self, mid):
+        db.approve_message(mid)
+        msgs = db.get_last_approved()
+        if msgs:
+            msg = msgs[0]
+            for w in list(self.display_windows):
+                try:
+                    if getattr(w, 'root', None) and w.root.winfo_exists():
+                        w.show_message_immediate(msg)
+                except:
+                    pass
+        self.load_pending()
+    
+    def reject(self, mid):
+        db.reject_message(mid)
+        self.load_pending()
+    
+    def force_base_message(self):
+        for w in self.display_windows:
+            if w.root.winfo_exists():
+                w.force_show_base_message()
+    
+    def start_auto_refresh(self):
+        def loop():
+            while True:
+                time.sleep(3)
+                try:
+                    self.root.after(0, self.load_pending)
+                    self.root.after(0, self.load_karaoke)
+                except:
+                    pass
+        threading.Thread(target=loop, daemon=True).start()
+    
+    def open_display(self):
+        disp = tk.Toplevel()
+        w = DisplayWindow(disp, self.message_duration, self.base_message)
+        self.display_windows.append(w)
+    
+    def open_qr(self):
+        qr = tk.Toplevel()
+        w = QRCodeWindow(qr, self.url, self.pin, QR_CODE_SIZE)
+        self.qr_windows.append(w)
+
+class DisplayWindow:
+    def __init__(self, root, message_duration=5, base_message="Scansiona il QR-CODE per mandare il tuo messaggio"):
+        self.root = root
+        self.root.title("Display Messaggi")
+        self.root.configure(bg='#1a1a2e')
+        self.container = tk.Frame(root, bg='#1a1a2e')
+        self.container.pack(fill=tk.BOTH, expand=True)
+        self.message_show_time = time.time()
+        self.current_id = None
+        self.pending_id = None
+        self.font_size = DISPLAY_FONT_SIZE
+        self.is_fullscreen = False
+        self.force_base_mode = False
+        self.message_duration = message_duration
+        self.base_message = base_message
+        settings = load_settings()
+        display_settings = settings.get('display', {})
+        if display_settings:
+            try:
+                self.root.geometry(display_settings.get('geometry', '1280x720'))
+                self.is_fullscreen = display_settings.get('fullscreen', False)
+                if self.is_fullscreen:
+                    self.root.attributes('-fullscreen', True)
+            except:
+                self.root.geometry("1280x720")
+        else:
+            self.root.geometry("1280x720")
+        self.root.bind('<Configure>', self.on_configure)
+        self.root.bind('<Escape>', lambda e: self.toggle_fullscreen())
+        self.root.bind('f', lambda e: self.toggle_fullscreen())
+        self.root.protocol("WM_DELETE_WINDOW", self.on_close)
+        self.show_qr_prompt()
+        self.poll()
+    
+    def on_configure(self, event):
+        if event.widget == self.root:
+            if hasattr(self, '_timer'):
+                self.root.after_cancel(self._timer)
+            self._timer = self.root.after(500, self.save_settings)
+    
+    def on_close(self):
+        self.save_settings()
+        self.root.destroy()
+    
+    def save_settings(self):
+        try:
+            settings = load_settings()
+            settings['display'] = {'geometry': self.root.geometry(), 'fullscreen': self.is_fullscreen}
+            save_settings(settings)
+        except:
+            pass
+    
+    def toggle_fullscreen(self):
+        self.is_fullscreen = not self.is_fullscreen
+        self.root.attributes('-fullscreen', self.is_fullscreen)
+        self.save_settings()
+    
+    def update_font_size(self, size):
+        self.font_size = size
+        msgs = db.get_last_approved()
+        if msgs and not self.force_base_mode:
+            self.show_message(msgs[0])
+        else:
+            self.show_qr_prompt()
+    
+    def update_message_duration(self, duration):
+        self.message_duration = duration
+    
+    def update_base_message(self, message):
+        self.base_message = message
+        if self.force_base_mode or not db.get_last_approved():
+            self.show_qr_prompt()
+    
+    def show_message(self, msg):
+        for w in self.container.winfo_children():
+            w.destroy()
+        mid, nome, testo, ts = msg
+        tk.Label(self.container, text=f"{nome}: {testo}", font=('Arial', self.font_size, 'bold'), 
+                bg='#1a1a2e', fg='white', wraplength=1200, justify=tk.CENTER).pack(expand=True)
+    
+    def show_message_immediate(self, msg):
+        try:
+            self.current_id = msg[0]
+            self.message_show_time = time.time()
+            self.force_base_mode = False
+            self.show_message(msg)
+        except:
+            pass
+    
+    def show_qr_prompt(self):
+        for w in self.container.winfo_children():
+            w.destroy()
+        tk.Label(self.container, text=self.base_message, 
+                font=('Arial', self.font_size, 'bold'), bg='#1a1a2e', fg='#00d9ff', 
+                wraplength=1200, justify=tk.CENTER).pack(expand=True)
+    
+    def force_show_base_message(self):
+        self.force_base_mode = True
+        msgs = db.get_last_approved()
+        if msgs:
+            self.current_id = msgs[0][0]
+        self.show_qr_prompt()
+        self.message_show_time = time.time()
+        self.pending_id = None
+    
+    def poll(self):
+        msgs = db.get_last_approved()
+        current_time = time.time()
+        elapsed_since_show = current_time - self.message_show_time
+        if msgs:
+            mid, nome, testo, ts = msgs[0]
+            if mid != self.current_id:
+                if elapsed_since_show >= self.message_duration:
+                    if self.force_base_mode:
+                        self.force_base_mode = False
+                    self.current_id = mid
+                    self.pending_id = None
+                    self.message_show_time = current_time
+                    self.show_message(msgs[0])
+                else:
+                    if self.pending_id != mid:
+                        self.pending_id = mid
+            else:
+                if not self.force_base_mode and elapsed_since_show >= 30:
+                    self.message_show_time = current_time
+                    self.pending_id = None
+                    self.show_qr_prompt()
+        else:
+            if not self.force_base_mode:
+                self.show_qr_prompt()
+                self.message_show_time = current_time
+                self.pending_id = None
+        self.root.after(1000, self.poll)
+
+def main():
+    print("\n" + "="*70)
+    print("SISTEMA MESSAGGI + KARAOKE + QUIZ + APPLAUSOMETRO")
+    print("="*70 + "\n")
+    if os.environ.get('NO_NGROK') != '1':
+        ngrok_token = os.environ.get('NGROK_TOKEN')
+        if ngrok_token:
+            ng = os.environ.get('NGROK_CMD') or ('ngrok.exe' if os.name == 'nt' else 'ngrok')
+            if os.path.exists(ng) or shutil.which(ng):
+                try:
+                    subprocess.run([ng if os.path.exists(ng) else shutil.which(ng), 'config', 'add-authtoken', ngrok_token], 
+                                 check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except:
+                    pass
+        def _start_ngrok_bg():
+            try:
+                start_ngrok()
+            except:
+                pass
+        threading.Thread(target=_start_ngrok_bg, daemon=True).start()
+    local_ip = get_local_ip()
+    local_url = f"http://{local_ip}:5000"
+    threading.Thread(target=start_server, daemon=True).start()
+    time.sleep(1)
+    root = tk.Tk()
+    cp = ControlPanel(root, local_url)
+    print("\n" + "="*70)
+    print("SISTEMA AVVIATO!")
+    print("="*70)
+    print(f"URL: {local_url}")
+    print(f"Parole vietate: {len(PAROLE_VIETATE)}")
+    print("="*70 + "\n")
+    root.mainloop()
+
+if __name__ == "__main__":
+    main()
+	
